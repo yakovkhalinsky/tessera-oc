@@ -1,0 +1,20 @@
+name: host tests
+
+# The port's engine against the FM-1's baseline: the port must play exactly what
+# the FM-1 plays. tools/build_host.sh generates the tables the engine reads and
+# runs the shared generator test (vendor/tessera/tests/tessera_test.c) with the
+# port's engine in place of the FM-1's.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: build and run the host test
+        run: tools/build_host.sh

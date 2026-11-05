@@ -1,0 +1,67 @@
+Tessera-OC
+Copyright (C) 2026 Yakov Khalinsky
+
+This product is a derivative work. It carries Tessera's generative engine and runs it
+on the Ornament & Crime hardware. The people whose work it is are credited below and
+in the README; their licences govern their parts.
+
+--------------------------------------------------------------------------------
+Tessera — the generative engine
+  Copyright (C) 2026 Theo Dainis (Rastapopolix)
+  https://github.com/Rastapopolix/tessera
+  GPL-3.0-only
+
+  Vendored as a submodule (vendor/tessera): a fork of Rastapopolix/tessera at the
+  branch port/engine-split, which splits the engine out of the audio path and adds
+  nothing else. The engine's sources, the shared generator test and the baseline are
+  Tessera's, unchanged apart from that split.
+
+--------------------------------------------------------------------------------
+Melodee — the FM-1 firmware Tessera grew out of
+  Copyright (C) 2026 Kerem Kilic (Ellic Studio)
+  https://github.com/keremimo/melodee
+  GPL-3.0-only
+
+  The sequencer, the parameter registry, the modulation matrix, the project format.
+
+--------------------------------------------------------------------------------
+Felucca — the upstream of Melodee
+  Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+  GPL-3.0-only
+
+--------------------------------------------------------------------------------
+Ornament & Crime — the hardware
+  The original o_C design by mxmxmx (https://ornament-and-cri.me/),
+  CC BY-NC-SA 4.0.
+  The O.R.N.8 (O_C T4.1) by Paul Stoffregen, https://github.com/PaulStoffregen/O_C_T41.
+
+  No hardware design is included in this repository. The module's CV outputs, trigger
+  outputs, OLED, encoders, buttons and DACs are the o_C's; this firmware drives them.
+
+--------------------------------------------------------------------------------
+O_C-Phazerville — the o_C module firmware
+  Copyright (C) DJ Phazer (djphazer), https://github.com/djphazer/O_C-Phazerville
+  MIT, with GPLv3 parts (the whole work is therefore subject to the GPL).
+
+  The reference for the Teensy 4.0's pinout, the module's clock, its MIDI and its UI
+  idiom. No code from it is included yet; the platform layer (Phase 2) will take its
+  conventions and, where code is reused, its attribution.
+
+--------------------------------------------------------------------------------
+Mutable Instruments — Plaits
+  Copyright (C) 2015-2020 Mutable Instruments
+  MIT (the code), GPL-3.0-or-later for some parts; Apache-2.0 for the MSFA data.
+  Tessera's MACRO engine uses it; the port carries no engine of its own.
+
+  DaisySP — the physical models, by Émilie Gillet. MIT.
+
+--------------------------------------------------------------------------------
+Chakra Petch — the type
+  Copyright (C) 2018 The Chakra Petch Project Authors
+  SIL Open Font License 1.1
+
+--------------------------------------------------------------------------------
+The port itself
+  Copyright (C) 2026 Yakov Khalinsky
+  GPL-3.0-only, so that the whole work stays under the licence of the engine it
+  carries.

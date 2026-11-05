@@ -1,0 +1,4 @@
+[submodule "vendor/tessera"]
+	path = vendor/tessera
+	url = git@github.com:yakovkhalinsky/tessera.git
+	branch = port/engine-split
