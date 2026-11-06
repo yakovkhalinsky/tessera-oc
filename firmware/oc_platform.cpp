@@ -38,21 +38,48 @@
 #include "oc_spi.h"
 #include "oc_version.h"
 
+/* The hardware variant: the o_C panel this port is built for. The VOR panel
+ * is not the same hardware (its pin 9 is a button, and the DAC's reset wants
+ * a pin this port does not have), and a build with no variant at all would
+ * take the pins below on faith. The variant is named in platformio.ini. */
+#if defined(OC_HW_UOC_VOR) || defined(OC_HW_VOR)
+#error "VOR panel unsupported on Teensy 4.0 (pin 9 is a button; DAC RST needs pin 9)"
+#elif !defined(OC_HW_UOC_A)
+#error "no hardware variant: set -DOC_HW_UOC_A in platformio.ini"
+#endif
+
 /* --------------------------------------------------------- the o_C's pins --- */
+/* The DAC and the OLED's own pins: the only outputs the module has. */
 #define PIN_DAC_CS 10          /* the DAC8565's chip select (SPI0's) */
 #define PIN_DAC_RST 9          /* its reset */
-#define PIN_TR1 0              /* the trigger inputs: TR1 takes the rig's clock */
+#define PIN_TR1 0              /* the trigger inputs: the rig's clock comes in
+                                * on the TR1 jack, whose pin is oc_pins.tr1 */
 #define PIN_TR2 1
 #define PIN_TR3 2
 #define PIN_TR4 3
-#define PIN_BUT_TOP 5          /* the buttons: the top, the bottom, and the two encoders' */
-#define PIN_BUT_BOT 4
-#define PIN_BUT_L 23
-#define PIN_BUT_R 14
-#define PIN_ENC_L1 22          /* the left encoder (quadrature) */
-#define PIN_ENC_L2 21
-#define PIN_ENC_R1 16          /* the right encoder */
-#define PIN_ENC_R2 15
+
+/* The module's input pins: the trigger inputs, the buttons and the encoders.
+ * The set is the same either way round (only the roles change with the flip),
+ * and the tables that say the roles are in oc_port.h. */
+static constexpr uint8_t OC_INPUT_PINS[] = {0, 1, 2, 3, 4, 5, 14, 15, 16, 21, 22, 23};
+
+/* The module's output pins: the OLED's three (6, 7, 8), the DAC's two (9, 10),
+ * the SPI's three (11, 12, 13) and the SPI's chip select (37). */
+static constexpr uint8_t OC_OUTPUT_PINS[] = OC_OUTPUT_PIN_LIST;
+
+/* The pin check: the module's inputs and its outputs must not meet. A control
+ * on a pin the module drives is a control that does not work. */
+static constexpr bool oc_pin_sets_disjoint(void)
+{
+    for (uint8_t a : OC_INPUT_PINS)
+        for (uint8_t b : OC_OUTPUT_PINS)
+            if (a == b)
+                return false;
+    return true;
+}
+static_assert(oc_pin_sets_disjoint(), "an input pin is an output pin");
+
+struct oc_pinout oc_pins = OC_PINOUT_PLAIN;
 
 /* the DAC8565: four channels, 16 bits, the output inverted */
 #define DAC_CMD(ch) (0x10u + ((ch) & 3u) * 2u)     /* 0x10, 0x12, 0x14, 0x16 */
@@ -95,6 +122,17 @@
 #define OC_CAL_DATA_SIZE 116u
 #define OC_CAL_FOURCC 0x43414C01u     /* 'CAL1' */
 
+/* The page's own layout (the o_C's CalibrationData, per Phazerville PSv2.0.2
+ * OC_calibration.h:136-150): the DAC's table (four channels of eleven
+ * octaves, 88 bytes), the ADC's (12 bytes), the display's column offset (a
+ * byte), three bytes of padding, and the flags (a word). */
+#define OC_CAL_OFF_DISPLAY 100u
+#define OC_CAL_OFF_FLAGS 104u
+
+/* the calibration's flags and the display's offset: the module's own */
+uint32_t oc_cal_flags;
+uint8_t oc_cal_display_offset = 2;    /* the SH1106's RAM is 132 wide */
+
 struct oc_cal_page {
     uint32_t fourcc;
     uint32_t generation;
@@ -136,6 +174,15 @@ static uint32_t oc_note_to_code_linear(int32_t pitch, int32_t mv_per_semitone)
     return oc_mv_to_level((pitch * mv_per_semitone) / 128);
 }
 
+/* The DAC's channel the engine's channel goes to: a module with the controls
+ * mirrored has its DAC channels mirrored too (A<->D, B<->C), and the
+ * calibration is per physical channel, so it is read with the physical
+ * channel as well. */
+static uint32_t oc_dac_ch(uint32_t ch)
+{
+    return (oc_cal_flags & OC_CAL_FLIPCONTROLS) ? (3u - ch) : ch;
+}
+
 /* a pitch as the DAC's level: the o_C's own mapping (its kOctaveZero, its
  * calibration table, the linear interpolation inside an octave). The pitch is
  * in the 128th of a semitone, as the o_C's own MIDI quantizer counts it. */
@@ -152,6 +199,7 @@ static uint32_t oc_note_to_level(uint32_t ch, int32_t pitch)
     if (pitch > DAC_MAX_OCTAVE * OC_OCTAVE_UNITS) pitch = DAC_MAX_OCTAVE * OC_OCTAVE_UNITS;
     octave = pitch / OC_OCTAVE_UNITS;
     fractional = pitch - octave * OC_OCTAVE_UNITS;
+    ch = oc_dac_ch(ch);
     lo = oc_cal_table[ch][octave];
     hi = oc_cal_table[ch][octave + 1];
     return (uint32_t)lo + (uint32_t)((int32_t)(fractional * ((int32_t)hi - (int32_t)lo)) / OC_OCTAVE_UNITS);
@@ -194,6 +242,11 @@ static void oc_cal_load(void)
                 uint32_t at = (ch * DAC_OCTAVES + oct) * 2u;
                 oc_cal_table[ch][oct] = (uint16_t)(page.data[at] | ((uint16_t)page.data[at + 1] << 8));
             }
+        /* the display's offset and the flags (the rest of the page's data) */
+        oc_cal_display_offset = page.data[OC_CAL_OFF_DISPLAY];
+        oc_cal_flags = 0;
+        for (uint32_t i = 0; i < 4u; i++)
+            oc_cal_flags |= (uint32_t)page.data[OC_CAL_OFF_FLAGS + i] << (8u * i);
         found = true;
     }
     if (!found) {
@@ -235,7 +288,7 @@ static void oc_dac_write(uint32_t ch, uint32_t level)
     digitalWriteFast(PIN_DAC_CS, LOW);
     LPSPI4_TCR = ((tcr & 0xF8000000u) & ~(LPSPI_TCR_CPHA | LPSPI_TCR_CPOL)) |
                  LPSPI_TCR_FRAMESZ(23) | OC_DAC_TCR_MODE;
-    LPSPI4_TDR = ((uint32_t)DAC_CMD(ch) << 16) | (uint32_t)(DAC_MAX - level);
+    LPSPI4_TDR = ((uint32_t)DAC_CMD(oc_dac_ch(ch)) << 16) | (uint32_t)(DAC_MAX - level);
     while (LPSPI4_RSR & LPSPI_RSR_RXEMPTY) { }    /* the frame is out */
     (void)LPSPI4_RDR;                             /* and drained */
     LPSPI4_TCR = tcr;
@@ -316,8 +369,9 @@ static void oc_cv_rest_all(void)
     uint32_t ch;
     for (ch = 0; ch < 4u; ch++) {
         if (oc_cal_valid) {
-            oc_cv_rest[ch] = oc_cal_table[ch][OC_OCTAVE_ZERO];
-            oc_cv_high[ch] = oc_cal_table[ch][OC_GATE_OCTAVE];
+            uint32_t phys = oc_dac_ch(ch);
+            oc_cv_rest[ch] = oc_cal_table[phys][OC_OCTAVE_ZERO];
+            oc_cv_high[ch] = oc_cal_table[phys][OC_GATE_OCTAVE];
         } else {
             oc_cv_rest[ch] = oc_mv_to_level(0);
             oc_cv_high[ch] = oc_mv_to_level(OC_GATE_MV);
@@ -385,7 +439,7 @@ uint8_t oc_clock_following(void) { return oc_clock_on; }
 
 static void oc_clock_watch(void)
 {
-    uint8_t level = digitalReadFast(PIN_TR1);
+    uint8_t level = digitalReadFast(oc_pins.tr1);
     if (!level && oc_clock_level) {              /* a falling edge: the rig's pulse */
         oc_clock_pulses++;
         if (oc_clock_on)
@@ -427,10 +481,10 @@ static uint8_t oc_button_prev;
 static uint8_t oc_buttons_edges(void)
 {
     uint8_t now = 0, edges;
-    if (!digitalRead(PIN_BUT_TOP)) now |= BUT_TOP;
-    if (!digitalRead(PIN_BUT_BOT)) now |= BUT_BOT;
-    if (!digitalRead(PIN_BUT_L)) now |= BUT_L;
-    if (!digitalRead(PIN_BUT_R)) now |= BUT_R;
+    if (!digitalRead(oc_pins.but_top)) now |= BUT_TOP;
+    if (!digitalRead(oc_pins.but_bot)) now |= BUT_BOT;
+    if (!digitalRead(oc_pins.but_l)) now |= BUT_L;
+    if (!digitalRead(oc_pins.but_r)) now |= BUT_R;
     edges = now & ~oc_button_prev;             /* only the edges */
     oc_button_prev = now;
     return edges;
@@ -445,21 +499,42 @@ void ui_draw(void);
 void ui_page_next(int32_t dir);
 void ui_button(int32_t which);
 
+/* the safe mode: the bottom button held at power-on. Either of the two
+ * buttons that can be the bottom one (pins 4 and 5) is accepted: the flag
+ * that says which is which is in the calibration, read after the pins. */
+static bool oc_safe_mode;
+
 void setup(void)
 {
+    /* The diagnostics first: the persistent stage word (what the last run
+     * reached) and the cycle counter (the timing). */
+    oc_diag_begin();
+    oc_stage(10);
+
     /* The trigger inputs: the o_C's own, read and never driven. They are
      * pulled up (as the o_C's firmware has them) and a trigger pulls the pin
-     * down. */
+     * down. The buttons and the encoders are inputs too, and they are the
+     * same pins either way round: only their roles change with the flip. */
     pinMode(PIN_TR1, INPUT_PULLUP);
     pinMode(PIN_TR2, INPUT_PULLUP);
     pinMode(PIN_TR3, INPUT_PULLUP);
     pinMode(PIN_TR4, INPUT_PULLUP);
-    pinMode(PIN_BUT_TOP, INPUT_PULLUP);
-    pinMode(PIN_BUT_BOT, INPUT_PULLUP);
-    pinMode(PIN_BUT_L, INPUT_PULLUP);
-    pinMode(PIN_BUT_R, INPUT_PULLUP);
-    digitalWrite(PIN_DAC_RST, HIGH);
-    pinMode(PIN_DAC_RST, OUTPUT);
+    for (uint32_t i = 0; i < sizeof OC_INPUT_PINS / sizeof OC_INPUT_PINS[0]; i++) pinMode(OC_INPUT_PINS[i], INPUT_PULLUP);
+    oc_stage(11);
+
+    /* Safe mode: bottom button held at power-on. Cap on the line needs
+     * settle time; require ALL samples LOW on the same pin (AND), not any. */
+    delay(25);                              /* ≥25 ms settle after INPUT_PULLUP */
+    {
+        const uint8_t candidates[2] = {4, 5}; /* but_bot either orientation; cal not read yet */
+        bool held[2] = {true, true};
+        for (int s = 0; s < 3; s++) {       /* ≥3 samples, 10 ms apart */
+            for (int c = 0; c < 2; c++)
+                if (digitalRead(candidates[c])) held[c] = false; /* HIGH → not held */
+            if (s + 1 < 3) delay(10);
+        }
+        oc_safe_mode = held[0] || held[1];  /* a pin LOW on every sample */
+    }
 
     /* The DAC and the OLED share the SPI bus and must never see each other's
      * bits. So neither of them uses the library's chip select: the library's
@@ -472,52 +547,89 @@ void setup(void)
     pinMode(PIN_DAC_CS, OUTPUT);
     digitalWrite(PIN_DAC_CS, HIGH);
     SPI.beginTransaction(SPISettings(12000000, MSBFIRST, SPI_MODE0));
+    oc_stage(12);
 
-    /* the DAC's reset: low, then high (the o_C's own sequence) */
-    digitalWrite(PIN_DAC_RST, LOW);
-    delay(5);
+    /* The DAC's reset: high only, and no low pulse (the o_C's own firmware
+     * does the same: the chip comes out of its reset on its own). */
     digitalWrite(PIN_DAC_RST, HIGH);
-    delay(5);
+    pinMode(PIN_DAC_RST, OUTPUT);
+    oc_stage(13);
 
     /* The USB serial: the crash report and the diagnostics. A module on the
      * other side of a rack has no other way to say what went wrong. */
     Serial.begin(115200);
-    if (CrashReport) {
-        Serial.println(F("Tessera-OC: the last run crashed:"));
-        Serial.print(CrashReport);
-        CrashReport.clear();
-    }
     Serial.print(F("Tessera-OC "));
     Serial.println(OC_VERSION_STRING);
 
-    /* The screen first, and the splash on it: the splash says the module is
-     * alive and which firmware it runs, before the engine's own init (which
-     * is what used to fault). */
-    oc_display_init();
-    oc_display_splash();
-
+    /* The calibration: the module's own, read only. It says where the
+     * display's columns start and how the module's controls are laid out. */
     oc_cal_load();
+    oc_pins = (oc_cal_flags & OC_CAL_FLIPCONTROLS) ? OC_PINOUT_FLIP : OC_PINOUT_PLAIN;
+    oc_stage(14);
+
+    /* The CV outs at rest (0 V on all four) before anything else runs. */
     oc_cv_rest_all();
-    oc_engine_init();
-    oc_storage_init();
-    if (oc_load((uint32_t)oc_last_slot()) != 0)
+
+    /* The screen: the crash report first (a module in a reboot loop stops
+     * here, and says what happened), then the splash. */
+    oc_display_init();
+    oc_stage(15);
+    oc_diag_crash();
+    oc_display_splash();
+    oc_stage(16);
+
+    /* The engine, and the storage: not in the safe mode. */
+    if (!oc_safe_mode)
+        oc_engine_init();
+    oc_stage(17);
+    if (!oc_safe_mode)
+        oc_storage_init();
+    oc_stage(18);
+
+    /* The project: the last one, or the power-on. */
+    if (!oc_safe_mode && oc_load((uint32_t)oc_last_slot()) != 0)
         oc_power_on();                    /* nothing saved: the module composes */
+    oc_stage(19);
+
     ui_init();                           /* the screen's own drawing takes over the splash */
+    oc_stage(20);
 
-    usbMIDI.begin();
+    /* The USB MIDI: not in the safe mode. */
+    if (!oc_safe_mode)
+        usbMIDI.begin();
+    oc_stage(21);
 
-    oc_timer.begin(oc_tick, OC_TICK_US);
-    oc_timer.priority(128);
+    /* The tick: last of all, and at the priority the o_C's own firmware uses
+     * (OC_config.h:29). */
+    if (!oc_safe_mode) {
+        oc_timer.begin(oc_tick, OC_TICK_US);
+        oc_timer.priority(80);
+    }
+    oc_stage(22);
+    oc_stage(23);
 }
 
 void loop(void)
 {
-    uint8_t buttons = oc_buttons_edges();
     static uint32_t last_draw;
+    static uint32_t loops;
+    uint8_t buttons;
+    bool diag = loops < 100u;               /* the first 100 iterations are
+                                             * reported, step by step */
+
+    /* The safe mode: the screen says what the module knows, and nothing
+     * else runs (no engine, no MIDI, no tick). */
+    if (oc_safe_mode) {
+        if (millis() - last_draw >= 250u) { last_draw = millis(); oc_diag_safe(); }
+        return;
+    }
+
+    buttons = oc_buttons_edges();
     if (buttons & BUT_TOP)
         oc_transport(oc_playing() ? 2u : 1u);    /* stop, or start */
     if (buttons & BUT_BOT)
         oc_transport(3u);                      /* restart from the top */
+
     /* the module's USB MIDI: the keys, the controllers and the clock. The
      * packet is the USB-MIDI one - the cable, the status, the two data bytes -
      * which is the shape the engine's MIDI in reads. */
@@ -535,4 +647,6 @@ void loop(void)
         ui_draw();
     }
     oc_cv_service();                             /* the DAC's pending writes */
+
+    if (diag) { loops++; oc_diag_loop(); oc_stage(99); }   /* the module runs */
 }

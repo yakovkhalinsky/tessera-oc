@@ -1,26 +1,94 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Yakov Khalinsky */
-/* The port's storage: the module's own flash, as a little filesystem.
+/* The port's storage: the module's own flash, as a little filesystem - and
+ * read only.
  *
- * The o_C has no SD card on this revision (the schematic has none, and the
- * T4.0's own flash is what there is), so the projects live in the Teensy's
- * program flash through LittleFS - the same drive the o_C's own firmware uses
- * for its settings (PhzConfig.cpp).
+ * The o_C has no SD card on this revision (the schematic has none), so the
+ * projects live in the Teensy's program flash through LittleFS - the same
+ * drive the o_C's own firmware uses for its settings (PhzConfig.cpp).
  *
- * One file a slot, written whole: the port's project is a few kilobytes, so a
- * file is written in one go and the little filesystem writes only the blocks
- * that changed.
+ * v0.1.2: the drive is READ ONLY. The firmware never writes the flash:
  *
- * The write blocks for as long as the flash takes, so a save happens with the
- * transport stopped (the engine's own rule: a save silences the sequencer). */
+ *   - the o_C's own firmware owns that flash (its settings and its presets
+ *     live there), and a program flash that is written behind its back is a
+ *     program flash that gets lost;
+ *   - a write path is a write path: it is the one thing that can turn a
+ *     firmware into a brick, and the port does not need it (the projects are
+ *     in the engine's own format, and a save is a nicety, not a feature);
+ *   - the security review (ZC, issuecomment-6677339063) asks for a fail
+ *     closed storage: it must be read only, and a mount that fails must
+ *     leave the module running, not formatting anything.
+ *
+ * So the drive mounts (the mount only: it is never formatted, not even a
+ * blank one) and is read. A write is refused before it starts: the write,
+ * the erase and the sync of the drive all return LFS_ERR_IO, and the port's
+ * own save says so.
+ *
+ * The geometry is the framework's own program-flash filesystem on the T4.0
+ * (framework-arduinoteensy 1.162.0, LittleFS.cpp:911-957): FLASH_SIZE
+ * 0x1F0000, SECTOR_SIZE 32768, the base at 0x60000000 + 0x1F0000 - 512 KiB =
+ * 0x60170000, the blocks 32768 bytes and 16 of them, the read, the program
+ * and the cache 128, the block cycles 800. The o_C's own firmware mounts the
+ * same drive the same way (PhzConfig.cpp:26: 1024 * 512), so the port reads
+ * the filesystem the module's own firmware wrote.
+ *
+ * If the mount fails (the drive is blank, or it holds a filesystem the port
+ * cannot read), the storage stays off: the module runs, nothing is written,
+ * and the project page says that there is no save. */
 
 #include <Arduino.h>
 #include <LittleFS.h>
 #include "oc_port.h"
 
-/* the drive: the Teensy's program flash (the maximum is 960 blocks of 1024) */
-static constexpr uint32_t DISK_SIZE = 1024 * 512;
-static LittleFS_Program fs;
+/* the drive: the program's flash, the last 512 KiB of the T4.0's, in 32 KiB
+ * blocks (the framework's own geometry, as above) */
+#define OC_FLASH_BASE 0x60170000UL
+#define OC_FLASH_BLOCK 32768u
+#define OC_FLASH_BLOCKS 16u
+
+static_assert(OC_FLASH_BLOCK * OC_FLASH_BLOCKS == 512u * 1024u, "the drive is 512 KiB");
+static_assert(OC_FLASH_BASE == 0x60170000UL, "the drive is at the T4.0's flash end");
+
+/* the length of the firmware in the flash: the drive must be behind it */
+extern unsigned long _flashimagelen;
+
+/* the drive: the module's flash, read only */
+class OcFlashRO : public LittleFS {
+public:
+    bool begin(void)
+    {
+        configured = false;
+        if ((uint32_t)&_flashimagelen >= OC_FLASH_BASE - 0x60000000UL)
+            return false;                   /* the firmware reaches the drive */
+        memset(&lfs, 0, sizeof(lfs));
+        memset(&config, 0, sizeof(config));
+        config.context = (void *)(uintptr_t)OC_FLASH_BASE;
+        config.read = &static_read;   config.prog = &static_prog;
+        config.erase = &static_erase; config.sync = &static_sync;
+        config.read_size = config.prog_size = config.cache_size = config.lookahead_size = 128;
+        config.block_size = OC_FLASH_BLOCK;    config.block_count = OC_FLASH_BLOCKS;
+        config.block_cycles = 800;              config.name_max = LFS_NAME_MAX;
+        configured = true;
+        if (lfs_mount(&lfs, &config) < 0)
+            return false;                   /* no format: the drive is read only */
+        mounted = true;
+        return true;
+    }
+
+private:
+    /* the read: the flash is memory mapped, so it is a copy */
+    static int static_read(const struct lfs_config *c, lfs_block_t block,
+                           lfs_off_t offset, void *buffer, lfs_size_t size)
+    { memcpy(buffer, (const uint8_t *)c->context + block * c->block_size + offset, size); return 0; }
+    /* the writes: there are none. The drive is read only. */
+    static int static_prog(const struct lfs_config *, lfs_block_t, lfs_off_t,
+                           const void *, lfs_size_t) { return LFS_ERR_IO; }
+    static int static_erase(const struct lfs_config *, lfs_block_t) { return LFS_ERR_IO; }
+    static int static_sync(const struct lfs_config *) { return LFS_ERR_IO; }
+};
+
+static OcFlashRO fs;
+static bool fs_ok;
 
 /* the project's own buffer: the engine packs into it */
 static uint8_t project_buf[16384];
@@ -34,28 +102,27 @@ static const char *slot_name(uint32_t slot)
 
 bool oc_storage_init(void)
 {
-    return fs.begin(DISK_SIZE);
+    fs_ok = fs.begin();
+    return fs_ok;
 }
 
-/* the project's bytes into the slot */
-int oc_save(uint32_t slot)
-{
-    uint32_t len = oc_project_pack(project_buf, sizeof project_buf);
-    File f;
-    if (!len)
-        return 1;
-    f = fs.open(slot_name(slot), LFS_O_WRONLY | LFS_O_TRUNC | LFS_O_CREAT);
-    if (!f)
-        return 2;
-    size_t written = f.write(project_buf, len);
-    f.close();
-    return written == len ? 0 : 2;
-}
+/* is the drive there? (the screen says so when it is not) */
+bool oc_storage_ok(void) { return fs_ok; }
 
-/* the slot's bytes into the project */
+/* the project's bytes into the slot: the drive is read only, so there is no
+ * save. The error is the answer, and nothing is touched. */
+int oc_save(uint32_t slot) { (void)slot; return 1; }
+
+/* The reads: fs.open(name), the default mode, and nothing else.
+ *
+ * The framework's FILE_READ is 0 and FILE_WRITE is 1 (cores/teensy4/FS.h:37-38),
+ * and littlefs's LFS_O_RDONLY is 1 (LittleFS/src/littlefs/lfs.h:127) - so
+ * open(name, LFS_O_RDONLY) opens for WRITE: it creates the file if it is not
+ * there and seeks to its end (LittleFS/src/LittleFS.h:278-296). The drive is
+ * read only, so the mode is the default one: FILE_READ. */
 int oc_load(uint32_t slot)
 {
-    File f = fs.open(slot_name(slot), LFS_O_RDONLY);
+    File f = fs.open(slot_name(slot));
     size_t len;
     int ok;
     if (!f)
@@ -73,7 +140,7 @@ static const char *LAST_NAME = "/last";
 
 int oc_last_slot(void)
 {
-    File f = fs.open(LAST_NAME, LFS_O_RDONLY);
+    File f = fs.open(LAST_NAME);
     uint8_t slot = 0;
     if (!f)
         return 0;
@@ -83,20 +150,14 @@ int oc_last_slot(void)
     return slot & 3u;
 }
 
-void oc_set_last_slot(uint32_t slot)
-{
-    File f = fs.open(LAST_NAME, LFS_O_WRONLY | LFS_O_TRUNC | LFS_O_CREAT);
-    uint8_t s = (uint8_t)(slot & 3u);
-    if (!f)
-        return;
-    f.write(&s, 1);
-    f.close();
-}
+/* the slot the module was last using: the drive is read only, so it is not
+ * written. */
+void oc_set_last_slot(uint32_t slot) { (void)slot; }
 
 /* is there anything in the slot? */
 int oc_slot_used(uint32_t slot)
 {
-    File f = fs.open(slot_name(slot), LFS_O_RDONLY);
+    File f = fs.open(slot_name(slot));
     if (!f)
         return 0;
     f.close();

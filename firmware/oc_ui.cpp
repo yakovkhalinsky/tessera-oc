@@ -20,12 +20,7 @@
 
 #include <Arduino.h>
 #include "oc_port.h"
-
-/* the module's encoders (the o_C's own pins) */
-#define ENC_L1 22
-#define ENC_L2 21
-#define ENC_R1 16
-#define ENC_R2 15
+#include "oc_version.h"
 
 /* --- the display, the platform's side --- */
 void oc_display_init(void);
@@ -151,38 +146,21 @@ static uint32_t ui_build_rows(void)
 }
 
 /* --- the encoders --- */
-/* The quadrature, from the state table: the direction of a turn and how far it
- * has gone. A detent is a whole cycle (four transitions), as the o_C's own
- * encoders count it, so a slow turn is one step and a fast one is still one. */
-static const int8_t QUAD[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-
+/* The quadrature is the port's own (oc_port.h): the state table, the
+ * direction of a turn and how far it has gone. */
 struct Encoder {
     uint8_t state;
     int8_t acc;
     uint8_t pin_a, pin_b;
 };
 
-static Encoder enc_left = {0, 0, ENC_L1, ENC_L2};
-static Encoder enc_right = {0, 0, ENC_R1, ENC_R2};
+static Encoder enc_left = {0, 0, 0, 0};
+static Encoder enc_right = {0, 0, 0, 0};
 
 static int32_t encoder_step(Encoder *e)
 {
     uint8_t state = (uint8_t)((digitalReadFast(e->pin_a) << 1) | digitalReadFast(e->pin_b));
-    int32_t steps = 0;
-    if (state != e->state) {
-        int8_t delta = QUAD[(e->state << 2) | state];
-        e->state = state;
-        e->acc = (int8_t)(e->acc + delta);
-        while (e->acc >= 4) {
-            e->acc = (int8_t)(e->acc - 4);
-            steps++;
-        }
-        while (e->acc <= -4) {
-            e->acc = (int8_t)(e->acc + 4);
-            steps--;
-        }
-    }
-    return steps;
+    return oc_enc_step(&e->state, &e->acc, state);
 }
 
 /* a copy, bounded: the engine's own str_cpy is not the platform's */
@@ -302,6 +280,16 @@ void ui_draw(void)
     snprintf(line, sizeof line, "%-4s T%u %3d BPM", PAGES[ui_page].name, (unsigned)(sel + 1u), (int)bpm);
     draw_line(0, line);
 
+    /* The project page without a drive: there is no save (the drive is read
+     * only), and the screen says so. */
+    if (PAGES[ui_page].rows == PAGE_PROJ && !oc_storage_ok()) {
+        snprintf(line, sizeof line, "SAVE OFF v%s", OC_VERSION);
+        draw_line(1, line);
+        draw_line(7, "L:ROW R:VALUE T:PAGE");
+        oc_display_flush();
+        return;
+    }
+
     for (uint32_t i = 0; i < 6u && first + i < n; i++) {
         uint32_t r = first + i;
         ui_row_text(&ui_rows[r], label, value);
@@ -312,21 +300,34 @@ void ui_draw(void)
     oc_display_flush();
 }
 
-/* the controls: the encoders and the buttons */
+/* the controls: the encoders and the buttons
+ *
+ * The turn's direction is the sign of the steps, and the count is the size of
+ * it: a turn backwards is as many steps as a turn forwards, and the old loop
+ * (while (steps--)) never ended for a negative count - a turn the other way
+ * hung the module. */
 void ui_input(void)
 {
     uint32_t n = ui_build_rows();
     int32_t steps = encoder_step(&enc_left);
-    while (steps-- && n) {
-        ui_row = (uint8_t)((ui_row + 1u) % n);
+    /* physical 21/22 shaft; cf. Phazerville ENCODER_CONFIG_L_REVERSED / OC_ui.cpp:70-71 */
+    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_left.pin_a, enc_left.pin_b))
+        steps = -steps;
+    int32_t dir = steps < 0 ? -1 : 1;
+    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--) {
+        /* the row moves the way the encoder turned, and wraps around */
+        ui_row = oc_enc_row(ui_row, dir, n);
         /* a track row chooses the track the other pages work on */
         if (ui_rows[ui_row].kind == ROW_TRACK)
             oc_select_track(ui_rows[ui_row].arg);
     }
 
     steps = encoder_step(&enc_right);
-    while (steps-- && n)
-        ui_row_turn(&ui_rows[ui_row], steps > 0 ? 1 : -1);
+    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_right.pin_a, enc_right.pin_b))
+        steps = -steps;
+    dir = steps < 0 ? -1 : 1;
+    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--)
+        ui_row_turn(&ui_rows[ui_row], dir);
 }
 
 /* the buttons: the left encoder's and the right one's. On the project page they
@@ -353,10 +354,12 @@ void ui_page_next(int32_t dir)
 
 void ui_init(void)
 {
-    pinMode(ENC_L1, INPUT_PULLUP);
-    pinMode(ENC_L2, INPUT_PULLUP);
-    pinMode(ENC_R1, INPUT_PULLUP);
-    pinMode(ENC_R2, INPUT_PULLUP);
-    enc_left.state = (uint8_t)((digitalReadFast(ENC_L1) << 1) | digitalReadFast(ENC_L2));
-    enc_right.state = (uint8_t)((digitalReadFast(ENC_R1) << 1) | digitalReadFast(ENC_R2));
+    enc_left.pin_a = oc_pins.enc_l1;
+    enc_left.pin_b = oc_pins.enc_l2;
+    enc_right.pin_a = oc_pins.enc_r1;
+    enc_right.pin_b = oc_pins.enc_r2;
+    for (uint8_t p : {oc_pins.enc_l1, oc_pins.enc_l2, oc_pins.enc_r1, oc_pins.enc_r2})
+        pinMode(p, INPUT_PULLUP);
+    enc_left.state = (uint8_t)((digitalReadFast(oc_pins.enc_l1) << 1) | digitalReadFast(oc_pins.enc_l2));
+    enc_right.state = (uint8_t)((digitalReadFast(oc_pins.enc_r1) << 1) | digitalReadFast(oc_pins.enc_r2));
 }

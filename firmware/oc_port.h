@@ -107,6 +107,102 @@ int oc_slot_used(uint32_t slot);
 int oc_last_slot(void);
 void oc_set_last_slot(uint32_t slot);
 bool oc_storage_init(void);
+bool oc_storage_ok(void);
+
+/* --- the module's own --- */
+
+/* The module's pins: the o_C's own T4.0 pinout, and the mirrored one for a
+ * module built the other way round (the calibration's FLIPCONTROLS bit).
+ *
+ * The tables are the o_C's own firmware's (Phazerville PSv2.0.2 OC_gpio.cpp:
+ * the default at :128-136, the flipped one at :82-94):
+ *
+ *   the default: but_top 5, but_bot 4, encL1 22, encL2 21, butL 23,
+ *                encR1 16, encR2 15, butR 14, TR1..TR4 = 0, 1, 2, 3;
+ *   the flipped:  but_top 4, but_bot 5, encL1 15, encL2 16, butL 14,
+ *                encR1 21, encR2 22, butR 23, TR1..TR4 = 3, 2, 1, 0.
+ *
+ * The flip is the calibration's FLIPCONTROLS bit: the o_C's own
+ * CALIBRATION_FLAG_FLIPCONTROLS is 1u << 3 (OC_calibration.h:130), and
+ * Main.cpp:349 hands it to OC::SetFlipMode, which swaps the pins as above.
+ *
+ * The remap may move the module's inputs and nothing else: the OLED's three
+ * pins (6, 7, 8), the DAC's two (9, 10) and the SPI's (11, 12, 13 and 25, 26,
+ * 27) are the module's own. */
+struct oc_pinout {
+    uint8_t but_top, but_bot, but_l, but_r;
+    uint8_t enc_l1, enc_l2, enc_r1, enc_r2;
+    uint8_t tr1;             /* the trigger input the rig's clock comes in on */
+};
+static const struct oc_pinout OC_PINOUT_PLAIN = {5, 4, 23, 14, 22, 21, 16, 15, 0};
+static const struct oc_pinout OC_PINOUT_FLIP = {4, 5, 14, 23, 15, 16, 21, 22, 3};
+#define OC_PIN_MOVABLE(p) ((p) < 6u || ((p) > 13u && (p) < 25u) || (p) > 27u)
+
+/* The module's output pins: the OLED's three (6, 7, 8), the DAC's two (9, 10),
+ * the SPI's three (11, 12, 13) and the SPI's chip select (37). The remap may
+ * not touch them, and the firmware drives nothing else. The firmware and the
+ * host test have the same set, and the two must not meet. */
+#define OC_OUTPUT_PIN_LIST {6, 7, 8, 9, 10, 11, 12, 13, 37}
+
+extern struct oc_pinout oc_pins;
+
+/* The calibration's flags, as the module's own page has them: the display's
+ * offset (the SH1106's RAM is 132 wide) and the flags (the FLIPSCREEN and
+ * the FLIPCONTROLS bits, the o_C's own CALIBRATION_FLAG_*: 1u << 2 and
+ * 1u << 3, OC_calibration.h:129-130). */
+#define OC_CAL_FLIPSCREEN 0x04u
+#define OC_CAL_FLIPCONTROLS 0x08u
+extern uint32_t oc_cal_flags;
+extern uint8_t oc_cal_display_offset;
+
+/* The encoders' quadrature: the o_C's own state table (the direction of a
+ * turn and how far it went), and the row it moves. Portable on purpose: the
+ * host test drives it (tests/oc_port_test.c).
+ *
+ * The direction is the sign of the steps: a turn backwards is as many steps as
+ * a turn forwards. The old loop (while (steps--)) never ended for a negative
+ * count, and a turn the other way hung the module. */
+static inline int32_t oc_enc_step(uint8_t *state, int8_t *acc, uint8_t new_state)
+{
+    static const int8_t q[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+    int32_t steps;
+    if (new_state == *state)
+        return 0;
+    *acc = (int8_t)(*acc + q[(*state << 2) | new_state]);
+    *state = new_state;
+    steps = *acc / 4;                     /* a detent is a whole cycle */
+    *acc = (int8_t)(*acc - steps * 4);
+    return steps;
+}
+
+static inline uint8_t oc_enc_row(uint8_t row, int32_t steps, uint32_t n)
+{
+    int32_t dir = steps < 0 ? -1 : 1;
+    uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps;
+    while (k-- && n)
+        row = (uint8_t)(((int32_t)row + dir + (int32_t)n) % (int32_t)n);
+    return row;
+}
+
+#ifndef OC_ENC_REV_PINS_21_22
+#define OC_ENC_REV_PINS_21_22 0
+#endif
+/* Physical shaft on pins 21/22 (PLAIN left / FLIP right). */
+static inline int oc_enc_on_21_22(uint8_t a, uint8_t b)
+{
+    return (a == 21u && b == 22u) || (a == 22u && b == 21u);
+}
+
+/* --- the diagnostics --- */
+/* The stage word (the persistent one), the timing, the crash report on the
+ * screen and the safe mode. */
+void oc_diag_begin(void);
+void oc_stage(uint32_t n);
+void oc_diag_block(uint32_t cycles);
+void oc_diag_loop(void);
+uint32_t oc_diag_cyccnt(void);
+void oc_diag_crash(void);
+void oc_diag_safe(void);
 
 /* --- the platform's side --- */
 

@@ -47,6 +47,11 @@ void oc_gate_write(uint32_t ch, uint32_t on)
     }
 }
 
+/* the diagnostics: the host has no cycle counter, and the block's cost is
+ * the host's business, not the module's */
+uint32_t oc_diag_cyccnt(void) { return 0; }
+void oc_diag_block(uint32_t cycles) { (void)cycles; }
+
 /* a step written by the test */
 static void put_step(track_t *t, uint32_t i, uint32_t n, const uint8_t *notes, uint32_t time, uint32_t flags)
 {
