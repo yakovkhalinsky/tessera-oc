@@ -93,10 +93,20 @@ static void TESSERA_NOTE_HOOK(track_t *t, uint32_t note, uint32_t vel);
 static void events_block(uint32_t n);     /* seq.c */
 static void oc_block(uint32_t n)
 {
-    events_block(n);
+    uint32_t i;
+    /* the cords' per-block destinations first: they move the track's parameters
+     * (the port's engine's own: the octave, the cents offset, the scale, what
+     * the digital out carries) and the pitch they move, which the CV takes */
+    for (i = 0; i < NTRK; i++) {
+        mod_begin(&trk[i]);
+        oc_pit[i] = mod.on ? mod.pit : 0;
+    }
+    events_block(n);                      /* the notes: the CV out and the gates */
     cord_tick();                          /* the organic sources, ENERGY, DRIFT's clock */
-    for (uint32_t i = 0; i < NTRK; i++)
+    for (i = 0; i < NTRK; i++) {
         track_lfo_tick(&trk[i]);           /* the track's LFO, once a block */
+        mod_end(&trk[i]);                  /* the stored values back */
+    }
 }
 
 /* The port's boot: the defaults and the empty patterns (as melodee_init on the

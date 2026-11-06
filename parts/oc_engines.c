@@ -32,8 +32,8 @@ static const engine_t ENG_CV = {
     .page_title = {"CV 1", "CV 2"},
     .edit = {
         OC_EDIT("OCT", F_OCT, -3, 3, 0),         /* P_E0: the track's octave on the CV out */
-        OC_EDIT("LEVEL", F_INT, 0, 127, 100),    /* P_E1: how hard the CV out drives */
-        OC_EDIT("GATE", F_INT, 0, 127, 64),      /* P_E2: the gate's length, as a share of the step */
+        OC_EDIT("PITCH", F_INT, -64, 64, 0),     /* P_E1: the cents offset (the vibrato's home) */
+        OC_EDIT("ACCENT", F_INT, 0, 127, 0),     /* P_E2: how much the velocity lengthens the gate */
         OC_EDIT("V/OCT", F_INT, 0, 1, 0),        /* P_E3: 0 = 1 V an octave (Eurorack), 1 = 0.1 V */
         OC_EDIT_NAMES("OUT", OC_OUT_NAMES, 0),    /* P_E4: what the digital out carries: gate, trigger, clock */
         OC_EDIT_NONE, OC_EDIT_NONE, OC_EDIT_NONE,

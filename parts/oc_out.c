@@ -50,6 +50,9 @@
 /* what a track's digital out carries */
 enum { OC_OUT_GATE, OC_OUT_TRIG, OC_OUT_CLOCK };
 static uint32_t oc_trig_until[NTRK];       /* the tick its trigger pulse ends at */
+static uint32_t oc_gate_until[NTRK];       /* the tick a gate falls at (the accent) */
+static uint8_t oc_vel[NTRK];               /* the last note's velocity */
+static int32_t oc_pit[NTRK];               /* the cords' pitch, in 1/16 semitones */
 
 /* the mode is the track's own parameter (the port's engine's P_E4), so the
  * cords can move it like any other */
@@ -61,18 +64,38 @@ uint32_t oc_out_mode(uint32_t part)
 /* the project's octave offset: every track's CV with it */
 static int32_t oc_cv_octave;
 
-/* a note as the port's note: the track's own octave (P_E0) and the project's
- * octave offset move it. The platform puts it at the module's own reference
- * (0 V = MIDI 36, C2, the T4.0's kOctaveZero = 3) and turns it into the DAC's
- * code through the module's calibration. */
-static uint32_t oc_cv_note(uint32_t part, uint32_t note)
+/* The CV out's pitch, in the module's own unit: a 128th of a semitone, with 0
+ * the note at 0 V (MIDI 36, C2, the T4.0's kOctaveZero = 3). The platform
+ * turns it into the DAC's code through the module's calibration, the o_C's own
+ * way.
+ *
+ * Onto the note:
+ * - the track's own octave (P_E0) and the project's octave offset;
+ * - the track's cents offset (P_E1), which the cords can move;
+ * - the cords' pitch (the matrix's PITCH destination: the LFO and the other
+ *   per-block sources), in the engine's own 1/16 semitone unit;
+ * - the LFO's own depth (P_LD_PIT, the vibrato), in the same unit;
+ * - the MIDI bend.
+ *
+ * So the whole modulation matrix reaches the CV, not just the engine's
+ * parameters: a cord to PITCH is a vibrato on the rig. */
+static int32_t oc_cv_pitch(uint32_t part, uint32_t note)
 {
-    int32_t n = (int32_t)note + oc_cv_octave * 12;
-    if (part < NPART)
-        n += (int32_t)trk[part].p[P_E0] * 12;
-    if (n < 0) n = 0;
-    if (n > 127) n = 127;
-    return (uint32_t)n;
+    int32_t p = ((int32_t)note - 36) * 128;         /* the 128th of a semitone */
+    int32_t lfo, bend;
+
+    if (part < NPART) {
+        p += (int32_t)trk[part].p[P_E0] * 12 * 128; /* the track's octave */
+        p += (int32_t)trk[part].p[P_E1] * 128 / 100; /* the cents offset */
+    }
+    p += oc_cv_octave * 12 * 128;                    /* the project's octave */
+
+    lfo = mulq15(trk[part].lfo_val, trk[part].lfo_fade);
+    p += ((lfo * trk[part].p[P_LD_PIT] * 3) >> 15) * 8;   /* the LFO's depth: 1/16 semitones */
+    p += oc_pit[part] * 8;                                /* the cords' pitch: 1/16 semitones */
+    bend = midi_bend_q8[part] * 128 / 25;                 /* the bend: Q8 semitones */
+    p += bend;
+    return p;
 }
 
 /* a note on: its pitch on the track's CV out, and its gate or its trigger */
@@ -81,7 +104,7 @@ static void oc_note_on(uint32_t part, uint32_t note, uint32_t vel)
     (void)vel;
     if (part >= NPART)
         return;
-    oc_cv_write(part, oc_cv_note(part, note));
+    oc_cv_write(part, (uint32_t)oc_cv_pitch(part, note));
     if (oc_out_mode(part) == OC_OUT_TRIG) {
         oc_trig_until[part] = oc_ticks() + OC_TRIG_TICKS;  /* a pulse at the note's onset */
         oc_gate_write(part, 1);
@@ -98,8 +121,22 @@ static void oc_note_off(uint32_t part, uint32_t note)
     (void)note;
     if (part >= NPART)
         return;
-    if (oc_out_mode(part) != OC_OUT_TRIG)
+    if (oc_out_mode(part) == OC_OUT_TRIG)
+        return;                                     /* a trigger's pulse ends on its own */
+    if (oc_out_mode(part) == OC_OUT_CLOCK)
+        return;
+    {   /* the accent: a loud note holds its gate a little longer (the modular's
+         * way: there is no level to speak of, only the gate's length) */
+        uint32_t accent = part < NPART ? (uint32_t)trk[part].p[P_E2] : 0u;
+        uint32_t extra = 0;
+        if (accent && oc_vel[part] > 96u)
+            extra = (uint32_t)(((uint64_t)(oc_vel[part] - 96u) * accent * 100u * FS) / (127u * 1000u));
+        if (extra) {
+            oc_gate_until[part] = oc_ticks() + extra;
+            return;
+        }
         oc_gate_write(part, 0);
+    }
 }
 
 /* the module's tick: a trigger's pulse ends on its own, and a track whose out
@@ -107,9 +144,14 @@ static void oc_note_off(uint32_t part, uint32_t note)
 void oc_out_tick(void)
 {
     uint32_t now = oc_ticks(), i;
-    for (i = 0; i < NTRK; i++)
+    for (i = 0; i < NTRK; i++) {
         if (oc_out_mode(i) == OC_OUT_TRIG && oc_trig_until[i] && now >= oc_trig_until[i]) {
             oc_trig_until[i] = 0;
             oc_gate_write(i, 0);
         }
+        if (oc_gate_until[i] && now >= oc_gate_until[i]) {   /* the accent's gate */
+            oc_gate_until[i] = 0;
+            oc_gate_write(i, 0);
+        }
+    }
 }

@@ -105,10 +105,10 @@ bool oc_storage_init(void);
 
 /* --- the platform's side --- */
 
-/* the CV out: the note for the channel (a MIDI note number, 0..127). The
- * platform puts it at the module's own reference and turns it into the DAC's
- * code, through the module's calibration. */
-void oc_cv_write(uint32_t ch, uint32_t note);
+/* the CV out: the pitch for the channel, in the 128th of a semitone, with 0
+ * the note at 0 V (MIDI 36, C2). The platform turns it into the DAC's code,
+ * through the module's calibration. */
+void oc_cv_write(uint32_t ch, uint32_t pitch);
 
 /* a digital out: high or low (a gate, a trigger or a clock) */
 void oc_gate_write(uint32_t ch, uint32_t on);

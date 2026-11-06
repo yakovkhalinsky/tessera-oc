@@ -90,25 +90,25 @@ static void oc_cal_load(void)
  * is asymmetric, so the output spans -3 V to +7 V, MIDI note 0 to 120. */
 #define OC_CV_MIN_MV (-3000)
 #define OC_CV_MAX_MV (7000)
-static uint32_t oc_note_to_code_linear(uint32_t note, int32_t mv_per_semitone)
+static uint32_t oc_note_to_code_linear(int32_t pitch, int32_t mv_per_semitone)
 {
-    int32_t mv = ((int32_t)note - 36) * mv_per_semitone + OC_CV_MIN_MV;
+    int32_t mv = (pitch * mv_per_semitone) / 128 + OC_CV_MIN_MV;
     if (mv < 0) mv = 0;
     if (mv > OC_CV_MAX_MV - OC_CV_MIN_MV) mv = OC_CV_MAX_MV - OC_CV_MIN_MV;
     return (uint32_t)((uint64_t)mv * 65535u / (uint64_t)(OC_CV_MAX_MV - OC_CV_MIN_MV));
 }
 
-/* a note as the DAC's code: the o_C's own mapping (its kOctaveZero, its
- * calibration table, the linear interpolation inside an octave) */
-static uint32_t oc_note_to_code(uint32_t ch, uint32_t note)
+/* a pitch as the DAC's code: the o_C's own mapping (its kOctaveZero, its
+ * calibration table, the linear interpolation inside an octave). The pitch is in
+ * the 128th of a semitone, as the o_C's own MIDI quantizer counts it. */
+static uint32_t oc_note_to_code(uint32_t ch, int32_t pitch)
 {
-    int32_t pitch = (int32_t)note * OC_SEMITONE_UNITS;
     int32_t octave, fractional;
     uint16_t lo, hi;
     if (oc_cv_scale(ch))
-        return oc_note_to_code_linear(note, 100);   /* 0.1 V an octave (V/oct systems) */
+        return oc_note_to_code_linear(pitch, 100);  /* 0.1 V an octave (V/oct systems) */
     if (!oc_cal_valid)
-        return oc_note_to_code_linear(note, 1000);  /* 1 V an octave, straight */
+        return oc_note_to_code_linear(pitch, 1000); /* 1 V an octave, straight */
     pitch += OC_OCTAVE_ZERO * OC_OCTAVE_UNITS;
     if (pitch < 0) pitch = 0;
     if (pitch > DAC_OCTAVES * OC_OCTAVE_UNITS) pitch = DAC_OCTAVES * OC_OCTAVE_UNITS;
@@ -120,12 +120,12 @@ static uint32_t oc_note_to_code(uint32_t ch, uint32_t note)
 }
 
 /* the CV out: the note, turned into the DAC's code and written */
-void oc_cv_write(uint32_t ch, uint32_t note)
+void oc_cv_write(uint32_t ch, uint32_t pitch)
 {
     uint32_t code;
     if (ch > 3u)
         return;
-    code = oc_note_to_code(ch, note);
+    code = oc_note_to_code(ch, (int32_t)pitch);
     code = DAC_MAX - code;                    /* the DAC's output is inverted */
     digitalWrite(PIN_DAC_CS, LOW);
     SPI.transfer16(DAC_CMD(ch));               /* the command */
