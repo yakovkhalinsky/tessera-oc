@@ -94,6 +94,8 @@ static void events_block(uint32_t n);     /* seq.c */
 static void oc_block(uint32_t n)
 {
     uint32_t i;
+    uint32_t t0 = oc_diag_cyccnt();       /* the block's own cost (the
+                                             * diagnostics) */
     /* the cords' per-block destinations first: they move the track's parameters
      * (the port's engine's own: the octave, the cents offset, the scale, what
      * the digital out carries) and the pitch they move, which the CV takes */
@@ -107,6 +109,7 @@ static void oc_block(uint32_t n)
         track_lfo_tick(&trk[i]);           /* the track's LFO, once a block */
         mod_end(&trk[i]);                  /* the stored values back */
     }
+    oc_diag_block(oc_diag_cyccnt() - t0);
 }
 
 /* The port's boot: the defaults and the empty patterns (as melodee_init on the

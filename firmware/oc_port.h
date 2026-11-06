@@ -105,8 +105,43 @@ int oc_save(uint32_t slot);
 int oc_load(uint32_t slot);
 int oc_slot_used(uint32_t slot);
 int oc_last_slot(void);
-void oc_set_last_slot(uint32_t slot);
+int oc_set_last_slot(uint32_t slot);
 bool oc_storage_init(void);
+bool oc_storage_ok(void);
+
+/* --- the module's own --- */
+
+/* The module's pins: the o_C's own T4.0 pinout, or the mirrored one (the
+ * module's calibration carries a FLIPCONTROLS flag for a module built with
+ * the controls the other way round). The trigger inputs are the same either
+ * way, so they are not here. */
+struct oc_pinout {
+    uint8_t but_top, but_bot, but_l, but_r;
+    uint8_t enc_l1, enc_l2, enc_r1, enc_r2;
+};
+extern struct oc_pinout oc_pins;
+
+/* The calibration's flags, as the module's own page has them: the display's
+ * offset (the SH1106's RAM is 132 wide) and the flags (the FLIPSCREEN and
+ * the FLIPCONTROLS bits). */
+#define OC_CAL_FLIPSCREEN 0x04u
+#define OC_CAL_FLIPCONTROLS 0x08u
+extern uint32_t oc_cal_flags;
+extern uint8_t oc_cal_display_offset;
+
+/* --- the diagnostics --- */
+/* The stage word (the persistent one), the timing, the crash report on the
+ * screen, the safe mode and the watchdog. */
+void oc_diag_begin(void);
+void oc_stage(uint32_t n);
+void oc_diag_isr(uint32_t cycles);
+void oc_diag_block(uint32_t cycles);
+void oc_diag_loop(void);
+uint32_t oc_diag_cyccnt(void);
+void oc_diag_crash(void);
+void oc_diag_safe(void);
+void oc_diag_screen(const char *text);
+void oc_diag_watchdog(bool arm);
 
 /* --- the platform's side --- */
 
