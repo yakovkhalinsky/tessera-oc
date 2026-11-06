@@ -53,9 +53,10 @@ whole work stays under the licence of the engine it carries.
 | **5** | Packaging: the PlatformIO build, the flash, the rig | the build is done; the rig is untested |
 
 Phase 1's acceptance criterion was that the port plays what the FM-1 plays. It does:
-the shared generator test runs against the FM-1's own baseline, **342 checks, none
-failing**. The two checks it skips are the ones that read the synth's voices (the pitch
-accumulator, ENERGY's drone): they need a synth, and the port has none.
+the shared generator test runs against the FM-1's own baseline, **375 checks, none
+failing** — 342 in the shared test and 33 in the port's own (the module's pin map and
+the encoders' quadrature). The two checks it skips are the ones that read the synth's
+voices (the pitch accumulator, ENERGY's drone): they need a synth, and the port has none.
 
 The current release is **v0.1.2** ([CHANGELOG.md](CHANGELOG.md)): the v0.1.0
 firmware bootlooped on the module (the engine's `.pool` was an orphan section
@@ -119,6 +120,7 @@ firmware/            the port: the o_C engine
 tests/               the port's tests
   oc_engine_test.c     the FM-1's generator test with the engine swapped for the port's
   oc_hostsim.c         the host environment (the port's engine, the block driver, the sinks)
+  oc_port_test.c       the port's own: the module's pin map and the encoders' quadrature
 tools/               the build scripts
   build_host.sh        the host build and the generator test
   check_sections.py    the memory map's check (no orphan RAM, nothing unwritten)
@@ -144,7 +146,8 @@ git -C vendor/tessera fetch origin && git -C vendor/tessera merge origin/main
 ## Build and test
 
 The host build needs only a C compiler and Python: it generates the tables the engine
-reads and runs the shared generator test against the FM-1's baseline.
+reads, runs the shared generator test against the FM-1's baseline, and runs the port's
+own test (the module's pin map and the encoders' quadrature).
 
 ```sh
 tools/build_host.sh          # build and run

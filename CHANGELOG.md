@@ -38,6 +38,15 @@ storage. v0.1.1 mounted the module's LittleFS drive and could write it.
   `SAVE OFF v0.1.2`. The CI greps the port's own sources for every write
   path (`flash_write`, `lfs_format`, `EEPROM.put`, …) and fails the build if
   one appears.
+* **The drive's geometry is the framework's own** on the T4.0
+  (framework-arduinoteensy 1.162.0, `LittleFS.cpp:911-957`): `FLASH_SIZE`
+  0x1F0000, `SECTOR_SIZE` 32768, the base at `0x60000000 + 0x1F0000 - 512K` =
+  0x60170000, the blocks 32768 bytes and **16** of them, the read, the program
+  and the cache 128, the block cycles 800. The o_C's own firmware mounts the
+  same drive the same way (`PhzConfig.cpp:26`: `1024 * 512`), so the port
+  reads the filesystem the module's own firmware wrote — the v0.1.1 geometry
+  (4 KiB blocks, 128 of them) could not mount it. Two static asserts hold the
+  geometry: the drive is 512 KiB, and its base is 0x60170000.
 
 ### The diagnostics
 
@@ -45,21 +54,23 @@ A module on a rack has no serial cable and no log, so it has to say what
 happened to itself, on its own screen, and across a reset.
 
 * `firmware/oc_diag.cpp`: a persistent stage word in the AXI RAM (which the
-  startup does not clear), the boot's stages (10 to 23), the loop's own steps
-  (30 to 34) and the tick's (50, then 99 when the module is running). The
-  stage is mirrored to the framework's crash breadcrumbs.
-* **The crash report is on the screen**, a page at a time, with the summary
-  first (the stage it died at, the CFSR, the faulting address, the PC, the
-  reset status and the tick's worst time). The bottom button goes on; there
-  is no timeout, so a module in a reboot loop stops on a screen that says what
-  happened.
-* **The safe mode**: the bottom button held at power-on. The calibration, the
-  DAC at 0 V and the display, and nothing else — no storage, no engine, no
-  tick, no MIDI.
-* **The timing**: the DWT's cycle counter, the longest tick and the longest
-  block, in microseconds.
-* **The watchdog**: WDOG1, 16 s, fed in the loop. A module that hangs resets
-  itself instead of sitting there.
+  startup does not clear), the boot's stages (10 to 23) and 99 when the module
+  is running. The stage is mirrored to the framework's crash breadcrumbs.
+* **The crash report is on the screen**, a page at a time: the framework's
+  own report (it has the fault, the CFSR, the faulting address, the PC and
+  the breadcrumbs), captured into a buffer of our own because the framework's
+  print clears the report as it prints it, with the stage the last run died
+  at first. The top button is the next page and the bottom one goes on;
+  there is no timeout, so a module in a reboot loop stops on a screen that
+  says what happened.
+* **The safe mode**: a button held at power-on. Either of the two buttons
+  that can be the bottom one (pins 4 and 5) is accepted, so the module's
+  orientation does not matter: the flag that says which is which is in the
+  calibration, and the calibration is read after the pins. The calibration,
+  the DAC at 0 V and the display, and nothing else — no storage, no engine,
+  no tick, no MIDI.
+* **The timing**: the DWT's cycle counter, the longest block, in
+  microseconds, on the safe mode's screen.
 
 ### The other fixes
 
@@ -67,28 +78,52 @@ happened to itself, on its own screen, and across a reset.
   there (no low pulse), then the calibration, then the CV outs at 0 V, then
   the display, then the engine, and the tick last, at the priority the o_C's
   own firmware uses (80).
-* **The flipped controls**: the module's calibration carries the flags, and
-  the FLIPCONTROLS bit says the module's controls are mirrored. The pinout
-  and the DAC's channels follow it (A↔D, B↔C), and the FLIPSCREEN bit says
-  the screen is the other way round. The remap may only touch the inputs: a
-  static assert says so.
+* **The pin map was the wrong way round**, and the module's buttons and
+  encoders were on each other's pins. The tables are the o_C's own firmware's
+  (Phazerville PSv2.0.2 `OC_gpio.cpp`: the default orientation at `:128-136`,
+  the flipped one at `:82-94`):
+
+  | | top | bottom | left enc. | left btn. | right enc. | right btn. | the rig's clock |
+  |---|---|---|---|---|---|---|---|
+  | the default | 5 | 4 | 22, 21 | 23 | 16, 15 | 14 | TR1 (pin 0) |
+  | the flipped | 4 | 5 | 15, 16 | 14 | 21, 22 | 23 | TR1 (pin 3) |
+
+  The flip is the calibration's FLIPCONTROLS bit: the o_C's own
+  `CALIBRATION_FLAG_FLIPCONTROLS` is `1u << 3` (`OC_calibration.h:130`), and
+  `Main.cpp:349` hands it to `OC::SetFlipMode`, which swaps the pins exactly
+  as the tables above do. The pinout and the DAC's channels follow it
+  (A↔D, B↔C), and the FLIPSCREEN bit says the screen is the other way
+  round. The remap may only touch the inputs: `tests/oc_port_test.c` says so
+  (the OLED's pins 6–8, the DAC's 9–10 and the SPI's are the module's own).
 * **The display's column offset** comes from the calibration, not from a
   hard-coded 2.
 * **The encoders.** A turn the other way never ended (`while (steps--)` with
   a negative count), and the right encoder's direction was tested after the
   decrement, so it turned the wrong way. The left encoder moves the row both
-  ways now, and the right one turns the way the encoder turned.
+  ways now, and the right one turns the way the encoder turned. The
+  quadrature and the row it moves are in `oc_port.h` (portable on purpose),
+  and `tests/oc_port_test.c` drives them: an anticlockwise turn is a negative
+  count, it ends, and it goes the other way — on both encoders, in both
+  orientations.
 
 ### Known
 
 * The firmware has not been on the module yet: **v0.1.2 is untested on
   hardware until Yakov confirms it.**
-* The drive's geometry is the o_C's own (4 KiB blocks, 128 of them, at
-  0x60170000). If the module's LittleFS was made with a different geometry,
-  the mount fails and the storage stays off — which is the safe way round.
+* If the module's LittleFS was made with a different geometry, the mount
+  fails and the storage stays off — which is the safe way round. The
+  geometry is the framework's own (32 KiB blocks, 16 of them, at
+  0x60170000), the same one the o_C's own firmware uses.
 * Part C of the brief (the display's page-at-a-time scheme over the SPI
   interrupt) was not done: it does not fit the line budget, and it is a
   performance change, not a fix. It is v0.1.3's work.
+* **The watchdog** (WDOG1, 16 s, fed in the loop) is not in this release: it
+  is not cross-checked against the o_C's own firmware yet. It is v0.1.3's
+  work.
+* The loop's own steps (the stages 30 to 34) are not in this release either:
+  they cost lines and only say something if the module hangs, which is the
+  watchdog's business. The boot's stages (10 to 23) are what is left, and
+  99 says the module is running.
 
 ## v0.1.1 — UNTESTED ON HARDWARE until Yakov confirms
 

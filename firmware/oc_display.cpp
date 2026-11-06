@@ -85,12 +85,8 @@ void oc_display_init(void)
     oc_spi_lock();
     for (uint32_t i = 0; i < sizeof OLED_INIT; i++) {
         uint8_t c = OLED_INIT[i];
-        if (oc_cal_flags & OC_CAL_FLIPSCREEN) {
-            if (c == 0xa1)
-                c = 0xa0;                   /* the segment */
-            else if (c == 0xc8)
-                c = 0xc0;                   /* the COM */
-        }
+        if (oc_cal_flags & OC_CAL_FLIPSCREEN)
+            c = (c == 0xa1) ? 0xa0 : (c == 0xc8) ? 0xc0 : c;    /* the segment, the COM */
         oled_command(c);
     }
     oc_spi_unlock();

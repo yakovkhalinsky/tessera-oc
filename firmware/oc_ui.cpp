@@ -22,9 +22,6 @@
 #include "oc_port.h"
 #include "oc_version.h"
 
-/* the module's encoders (the o_C's own pins, or the mirrored ones: the
- * pinout says which) */
-
 /* --- the display, the platform's side --- */
 void oc_display_init(void);
 void oc_display_clear(void);
@@ -149,11 +146,8 @@ static uint32_t ui_build_rows(void)
 }
 
 /* --- the encoders --- */
-/* The quadrature, from the state table: the direction of a turn and how far it
- * has gone. A detent is a whole cycle (four transitions), as the o_C's own
- * encoders count it, so a slow turn is one step and a fast one is still one. */
-static const int8_t QUAD[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-
+/* The quadrature is the port's own (oc_port.h): the state table, the
+ * direction of a turn and how far it has gone. */
 struct Encoder {
     uint8_t state;
     int8_t acc;
@@ -166,21 +160,7 @@ static Encoder enc_right = {0, 0, 0, 0};
 static int32_t encoder_step(Encoder *e)
 {
     uint8_t state = (uint8_t)((digitalReadFast(e->pin_a) << 1) | digitalReadFast(e->pin_b));
-    int32_t steps = 0;
-    if (state != e->state) {
-        int8_t delta = QUAD[(e->state << 2) | state];
-        e->state = state;
-        e->acc = (int8_t)(e->acc + delta);
-        while (e->acc >= 4) {
-            e->acc = (int8_t)(e->acc - 4);
-            steps++;
-        }
-        while (e->acc <= -4) {
-            e->acc = (int8_t)(e->acc + 4);
-            steps--;
-        }
-    }
-    return steps;
+    return oc_enc_step(&e->state, &e->acc, state);
 }
 
 /* a copy, bounded: the engine's own str_cpy is not the platform's */
@@ -331,9 +311,9 @@ void ui_input(void)
     uint32_t n = ui_build_rows();
     int32_t steps = encoder_step(&enc_left);
     int32_t dir = steps < 0 ? -1 : 1;
-    for (int32_t k = steps < 0 ? -steps : steps; k > 0 && n; k--) {
+    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--) {
         /* the row moves the way the encoder turned, and wraps around */
-        ui_row = (uint8_t)(((int32_t)ui_row + dir + (int32_t)n) % (int32_t)n);
+        ui_row = oc_enc_row(ui_row, dir, n);
         /* a track row chooses the track the other pages work on */
         if (ui_rows[ui_row].kind == ROW_TRACK)
             oc_select_track(ui_rows[ui_row].arg);
@@ -341,7 +321,7 @@ void ui_input(void)
 
     steps = encoder_step(&enc_right);
     dir = steps < 0 ? -1 : 1;
-    for (int32_t k = steps < 0 ? -steps : steps; k > 0 && n; k--)
+    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--)
         ui_row_turn(&ui_rows[ui_row], dir);
 }
 

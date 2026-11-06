@@ -42,43 +42,18 @@
 /* The DAC and the OLED's own pins: the only outputs the module has. */
 #define PIN_DAC_CS 10          /* the DAC8565's chip select (SPI0's) */
 #define PIN_DAC_RST 9          /* its reset */
-#define PIN_TR1 0              /* the trigger inputs: TR1 takes the rig's clock */
+#define PIN_TR1 0              /* the trigger inputs: the rig's clock comes in
+                                * on the TR1 jack, whose pin is oc_pins.tr1 */
 #define PIN_TR2 1
 #define PIN_TR3 2
 #define PIN_TR4 3
 
-/* The module's own inputs: the buttons and the encoders. The o_C's T4.0
- * pinout (per Phazerville PSv2.0.2 OC_gpio.cpp:54-104) is the top button on
- * 4, the bottom one on 5, the left encoder on 15 and 16 with its button on
- * 14, the right one on 21 and 22 with its button on 23.
- *
- * A module whose controls are the other way round (the calibration's
- * FLIPCONTROLS flag) has them mirrored: the top and the bottom button swap,
- * and so do the two encoders and their buttons. The set of pins is the same
- * either way - only the roles change - so all of them are inputs, and the
- * roles are what the pinout below says. */
-constexpr struct oc_pinout OC_PINOUT_PLAIN = {4, 5, 14, 23, 15, 16, 21, 22};
-constexpr struct oc_pinout OC_PINOUT_FLIP = {5, 4, 23, 14, 22, 21, 16, 15};
-
-/* the module's input pins: the buttons and the encoders, the same either
- * way round (only their roles change with the flip) */
-static const uint8_t OC_INPUT_PINS[] = {4, 5, 14, 15, 16, 21, 22, 23};
+/* The module's input pins: the trigger inputs, the buttons and the encoders.
+ * The set is the same either way round (only the roles change with the flip),
+ * and the tables that say the roles are in oc_port.h. */
+static const uint8_t OC_INPUT_PINS[] = {0, 1, 2, 3, 4, 5, 14, 15, 16, 21, 22, 23};
 
 struct oc_pinout oc_pins = OC_PINOUT_PLAIN;
-
-/* The check the flip has to pass: it may move the module's inputs and
- * nothing else. The outputs (the DAC's select and reset, the display's
- * three) and the SPI's pins are the module's, and a remap that moved one of
- * them would drive the wrong thing. */
-constexpr bool oc_pins_are_inputs(const struct oc_pinout &p)
-{
-    const uint8_t pins[] = {p.but_top, p.but_bot, p.but_l, p.but_r,
-                            p.enc_l1, p.enc_l2, p.enc_r1, p.enc_r2};
-    for (uint8_t pin : pins) if (pin >= 6u && pin <= 13u) return false;
-    return true;
-}
-static_assert(oc_pins_are_inputs(OC_PINOUT_PLAIN), "the pinout must be inputs only");
-static_assert(oc_pins_are_inputs(OC_PINOUT_FLIP), "the flipped pinout must be inputs only");
 
 /* the DAC8565: four channels, 16 bits, the output inverted */
 #define DAC_CMD(ch) (0x10u + ((ch) & 3u) * 2u)     /* 0x10, 0x12, 0x14, 0x16 */
@@ -243,10 +218,9 @@ static void oc_cal_load(void)
             }
         /* the display's offset and the flags (the rest of the page's data) */
         oc_cal_display_offset = page.data[OC_CAL_OFF_DISPLAY];
-        oc_cal_flags = (uint32_t)page.data[OC_CAL_OFF_FLAGS] |
-                       ((uint32_t)page.data[OC_CAL_OFF_FLAGS + 1u] << 8) |
-                       ((uint32_t)page.data[OC_CAL_OFF_FLAGS + 2u] << 16) |
-                       ((uint32_t)page.data[OC_CAL_OFF_FLAGS + 3u] << 24);
+        oc_cal_flags = 0;
+        for (uint32_t i = 0; i < 4u; i++)
+            oc_cal_flags |= (uint32_t)page.data[OC_CAL_OFF_FLAGS + i] << (8u * i);
         found = true;
     }
     if (!found) {
@@ -439,7 +413,7 @@ uint8_t oc_clock_following(void) { return oc_clock_on; }
 
 static void oc_clock_watch(void)
 {
-    uint8_t level = digitalReadFast(PIN_TR1);
+    uint8_t level = digitalReadFast(oc_pins.tr1);
     if (!level && oc_clock_level) {              /* a falling edge: the rig's pulse */
         oc_clock_pulses++;
         if (oc_clock_on)
@@ -459,7 +433,7 @@ static uint32_t oc_sample_acc_q16;
 
 static void oc_tick(void)
 {
-    uint32_t n, t0 = oc_diag_cyccnt();
+    uint32_t n;
     oc_sample_acc_q16 += (uint32_t)(((uint64_t)oc_sample_rate() * OC_TICK_US << 16) / 1000000u);
     n = oc_sample_acc_q16 >> 16;
     oc_sample_acc_q16 &= 0xFFFFu;
@@ -467,8 +441,6 @@ static void oc_tick(void)
     oc_clock_advance(n);
     oc_out_tick();
     oc_clock_out(n);
-    /* the tick's own cost: the longest one is kept (the diagnostics) */
-    oc_diag_isr(oc_diag_cyccnt() - t0);
 }
 
 /* The buttons: the top one starts and stops the transport, the bottom one
@@ -502,10 +474,8 @@ void ui_page_next(int32_t dir);
 void ui_button(int32_t which);
 
 /* the safe mode: the bottom button held at power-on. Either of the two
- * buttons that can be the bottom one (4 and 5: a module with the controls
- * mirrored has them the other way round) is accepted, because the flag that
- * says which is which is in the calibration, and the calibration is read
- * after the pins are set up. */
+ * buttons that can be the bottom one (pins 4 and 5) is accepted: the flag
+ * that says which is which is in the calibration, read after the pins. */
 static bool oc_safe_mode;
 
 void setup(void)
@@ -523,14 +493,15 @@ void setup(void)
     pinMode(PIN_TR2, INPUT_PULLUP);
     pinMode(PIN_TR3, INPUT_PULLUP);
     pinMode(PIN_TR4, INPUT_PULLUP);
-    for (uint32_t i = 0; i < sizeof OC_INPUT_PINS / sizeof OC_INPUT_PINS[0]; i++)
-        pinMode(OC_INPUT_PINS[i], INPUT_PULLUP);
+    for (uint32_t i = 0; i < sizeof OC_INPUT_PINS / sizeof OC_INPUT_PINS[0]; i++) pinMode(OC_INPUT_PINS[i], INPUT_PULLUP);
     oc_stage(11);
 
-    /* The safe mode: the bottom button held at power-on. */
-    for (int i = 0; i < 3; i++) {
+    /* The safe mode: the bottom button held at power-on. Either of the two
+     * buttons that can be the bottom one (pins 4 and 5) counts, so the
+     * module's orientation does not matter. */
+    for (int i = 0; i < 3; i++) {           /* three samples over 30 ms */
         if (!digitalRead(4) || !digitalRead(5)) oc_safe_mode = true;
-        delay(10);                            /* three samples over 30 ms */
+        delay(10);
     }
 
     /* The DAC and the OLED share the SPI bus and must never see each other's
@@ -579,13 +550,8 @@ void setup(void)
     if (!oc_safe_mode)
         oc_engine_init();
     oc_stage(17);
-    if (!oc_safe_mode) {
+    if (!oc_safe_mode)
         oc_storage_init();
-        if (!oc_storage_ok()) {
-            oc_diag_screen("STORAGE OFF (RO)");
-            delay(2000);
-        }
-    }
     oc_stage(18);
 
     /* The project: the last one, or the power-on. */
@@ -609,11 +575,6 @@ void setup(void)
     }
     oc_stage(22);
     oc_stage(23);
-
-    /* The watchdog: after the screens (never before the crash screen's
-     * wait), so the module that waits for a button is not reset under the
-     * user's hand. */
-    oc_diag_watchdog(true);
 }
 
 void loop(void)
@@ -628,11 +589,9 @@ void loop(void)
      * else runs (no engine, no MIDI, no tick). */
     if (oc_safe_mode) {
         if (millis() - last_draw >= 250u) { last_draw = millis(); oc_diag_safe(); }
-        oc_diag_watchdog(false);
         return;
     }
 
-    if (diag) oc_stage(30);                /* the buttons */
     buttons = oc_buttons_edges();
     if (buttons & BUT_TOP)
         oc_transport(oc_playing() ? 2u : 1u);    /* stop, or start */
@@ -642,7 +601,6 @@ void loop(void)
     /* the module's USB MIDI: the keys, the controllers and the clock. The
      * packet is the USB-MIDI one - the cable, the status, the two data bytes -
      * which is the shape the engine's MIDI in reads. */
-    if (diag) oc_stage(31);                /* the MIDI */
     while (usbMIDI.read()) {
         uint8_t status = usbMIDI.getType();
         uint32_t pkt = (uint32_t)usbMIDI.getCable() | (uint32_t)status << 8;
@@ -651,16 +609,12 @@ void loop(void)
         oc_midi_in(pkt);
     }
 
-    if (diag) oc_stage(32);                /* the UI's input */
     ui_input();
-    if (diag) oc_stage(33);                /* the UI's draw */
     if (millis() - last_draw >= 100u) {          /* ten screens a second */
         last_draw = millis();
         ui_draw();
     }
-    if (diag) oc_stage(34);                /* the CV's service */
     oc_cv_service();                             /* the DAC's pending writes */
 
     if (diag) { loops++; oc_diag_loop(); oc_stage(99); }   /* the module runs */
-    oc_diag_watchdog(false);
 }

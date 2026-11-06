@@ -37,10 +37,7 @@ jobs:
       # port at all - and the build says so.
       - name: no write path to the flash or the EEPROM
         run: |
-          if grep -rnE 'flash_write|flash_erase|eeprom_write|lfs_format|lfs_file_write|lfs_remove|lfs_rename|EEPROM\.(put|write|update)|eepromemu_|LittleFS_Program|\.format\(|eraseFiles' firmware/ parts/; then
-            echo "::error::the port has a write path to the flash or the EEPROM"
-            exit 1
-          fi
+          if grep -rnE 'flash_write|flash_erase|eeprom_write|lfs_format|lfs_file_write|lfs_remove|lfs_rename|EEPROM\.(put|write|update)|eepromemu_|LittleFS_Program|\.format\(|eraseFiles' firmware/ parts/; then echo "::error::the port has a write path to the flash or the EEPROM"; exit 1; fi
       - name: install PlatformIO
         run: pip install platformio
       - name: build for the Teensy 4.0

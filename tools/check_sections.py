@@ -77,13 +77,7 @@ KNOWN_RAM_SECTIONS = (".data", ".bss", ".pool", ".noinit", ".bss.dma")
 UNMANAGED = (".bss.dma",)
 
 # the map's own symbols: they are the addresses, not data in the RAM
-MAP_SYMBOLS = frozenset((
-    "_sdata", "_edata", "_sdataload", "_sbss", "_ebss", "_estack",
-    "_heap_start", "_heap_end", "_flashimagelen", "_stext", "_etext",
-    "_stextload", "__exidx_start", "__exidx_end", "__text_csf_end",
-    "__init_array_start", "__init_array_end",
-    "__preinit_array_start", "__preinit_array_end",
-))
+MAP_SYMBOLS = frozenset(("_sdata", "_edata", "_sbss", "_ebss", "_estack"))
 
 # the stack's headroom: the stack grows down from _estack, and the MPU traps
 # a stack overflow at _ebss. Under 64 KiB the module would fault on a deep
@@ -156,8 +150,8 @@ def main():
     lines.append("  _edata 0x%08x   _sbss 0x%08x   _ebss 0x%08x   _estack 0x%08x"
                  % (edata, sbss, ebss, estack))
 
-    # the data symbols: the map's own addresses are not data
-    data = {n: a for n, a in symbols.items() if n not in MAP_SYMBOLS}
+    # the data symbols: the ones in the RAM, and not the map's own addresses
+    data = {n: a for n, a in symbols.items() if in_ram(a) and n not in MAP_SYMBOLS}
 
     # 1. the orphan gap: nothing may sit between the copied data and the
     #    cleared bss
@@ -203,47 +197,35 @@ def main():
     #    it (the v0.1.1 fault). So: _ebss 32-aligned, the trap empty, and
     #    the stock padding in front of it empty too.
     if ebss % 32:
-        problems.append("_ebss (0x%08x) is not 32-aligned: the MPU's "
-                        "stack-overflow trap would be rounded down and would "
-                        "cover the RAM behind it" % ebss)
-    for lo, hi, what in ((ebss, ebss + 32, "the MPU's stack-overflow trap"),
-                          (ebss - 32, ebss, "the padding in front of the trap")):
+        problems.append("_ebss (0x%08x) is not 32-aligned: the MPU's stack-overflow trap would cover the RAM behind it" % ebss)
+    for lo, hi, what in ((ebss, ebss + 32, "the MPU's trap"), (ebss - 32, ebss, "the padding in front of it")):
         hits = sorted((a, n) for n, a in data.items() if lo <= a < hi)
         if hits:
-            problems.append("%d symbol(s) in %s (0x%08x..0x%08x): %s"
-                            % (len(hits), what, lo, hi,
-                               ", ".join("%s@0x%08x" % (n, a) for a, n in hits[:12])))
+            problems.append("%d symbol(s) in %s (0x%08x..0x%08x): %s" % (len(hits), what, lo, hi, ", ".join("%s@0x%08x" % (n, a) for a, n in hits[:12])))
 
     # 5. .bss holds no initialised data: it must cost no flash
     bss = [s for s in sections if s[0] == ".bss"]
     if not bss:
         problems.append("the ELF has no .bss section")
     elif bss[0][3]:
-        problems.append(".bss is loaded (it has contents): it must be NOBITS, "
-                        "for it is cleared, not copied")
+        problems.append(".bss is loaded: it must be NOBITS, for it is cleared, not copied")
 
     # 6. the diagnostics word: it has to survive the reset, so it must be in
     #    the AXI RAM (.bss.dma), not in the cleared .bss
     persist = symbols.get("oc_persist")
     dma = [s for s in sections if s[0] == ".bss.dma"]
     if persist is None:
-        problems.append("the ELF has no oc_persist (the persistent diagnostics "
-                        "word): the build is not the port's")
+        problems.append("the ELF has no oc_persist (the persistent diagnostics word): the build is not the port's")
     elif sbss <= persist < ebss + 32:
-        problems.append("oc_persist is at 0x%08x, in the cleared bss: the "
-                        "startup would wipe it at every reset" % persist)
+        problems.append("oc_persist is at 0x%08x, in the cleared bss: the startup would wipe it at every reset" % persist)
     elif not dma or not (dma[0][1] <= persist < dma[0][1] + dma[0][2]):
-        problems.append("oc_persist is at 0x%08x, not in .bss.dma (the AXI "
-                        "RAM): it must survive the reset" % persist)
+        problems.append("oc_persist is at 0x%08x, not in .bss.dma (the AXI RAM): it must survive the reset" % persist)
 
     # 7. the stack's headroom: the stack grows down from _estack
     headroom = estack - ebss
-    lines.append("  the stack's headroom: %d bytes (0x%08x..0x%08x)"
-                 % (headroom, ebss, estack))
+    lines.append("  the stack's headroom: %d bytes (0x%08x..0x%08x)" % (headroom, ebss, estack))
     if headroom < MIN_HEADROOM:
-        problems.append("the stack has %d bytes between _ebss and _estack: "
-                        "under %d the module would fault on a deep call"
-                        % (headroom, MIN_HEADROOM))
+        problems.append("the stack has %d bytes between _ebss and _estack: under %d the module would fault on a deep call" % (headroom, MIN_HEADROOM))
 
     if problems:
         lines.append("  the map is not sound:")

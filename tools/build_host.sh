@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Build the o_C port's host test: the port's engine, the shared generator test,
-# and the tables the engine needs (generated from the vendored Tessera).
+# Build the o_C port's host tests: the port's engine, the shared generator test,
+# the port's own test (the pins and the encoders), and the tables the engine
+# needs (generated from the vendored Tessera).
 #
 #   tools/build_host.sh          build and run
 #   tools/build_host.sh build    build only
@@ -27,7 +28,12 @@ cc -O2 -ffp-contract=off -w \
    -I"$GEN" -Ifirmware -I"$TESSERA/firmware/src" -Itests \
    -o "$OUT/oc_engine_test" tests/oc_engine_test.c -lm
 
+# the port's own test: the module's pins (the o_C's own tables) and the
+# encoders' quadrature (the turn the other way must end)
+cc -O2 -w -Ifirmware -I"$TESSERA/firmware/src" -o "$OUT/oc_port_test" tests/oc_port_test.c
+
 [ "$1" = build ] && exit 0
 
 # the baseline is the FM-1's: the port must play exactly what the FM-1 plays
-exec "$OUT/oc_engine_test" "$TESSERA/tests/tessera_baseline.txt" build/oc_log
+"$OUT/oc_engine_test" "$TESSERA/tests/tessera_baseline.txt" build/oc_log || exit 1
+exec "$OUT/oc_port_test"
