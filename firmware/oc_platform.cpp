@@ -23,6 +23,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <EEPROM.h>
+#include <MIDIUSB.h>
 #include "oc_port.h"
 
 /* --------------------------------------------------------- the o_C's pins --- */
@@ -294,6 +295,8 @@ void setup(void)
     oc_display_init();
     ui_init();
 
+    usbMIDI.begin();
+
     oc_timer.begin(oc_tick, OC_TICK_US);
     oc_timer.priority(128);
 }
@@ -306,6 +309,17 @@ void loop(void)
         oc_transport(oc_playing ? 2u : 1u);    /* stop, or start */
     if (buttons & BUT_BOT)
         oc_transport(3u);                      /* restart from the top */
+    /* the module's USB MIDI: the keys, the controllers and the clock. The
+     * packet is the USB-MIDI one - the cable, the status, the two data bytes -
+     * which is the shape the engine's MIDI in reads. */
+    while (usbMIDI.read()) {
+        uint8_t status = usbMIDI.getType();
+        uint32_t pkt = (uint32_t)usbMIDI.getCable() | (uint32_t)status << 8;
+        if (status < 0xF0u)
+            pkt |= (uint32_t)usbMIDI.getData1() << 16 | (uint32_t)usbMIDI.getData2() << 24;
+        oc_midi_in(pkt);
+    }
+
     ui_input();
     if (millis() - last_draw >= 100u) {          /* ten screens a second */
         last_draw = millis();

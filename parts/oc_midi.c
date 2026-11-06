@@ -51,6 +51,14 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     return 1;
 }
 
+/* A MIDI packet in, from the module's USB: the engine's own MIDI in path (the
+ * keys, the controllers and the clock). The packet is the USB-MIDI one, four
+ * bytes: the cable, the status, the two data bytes - the FM-1's own shape. */
+void oc_midi_in(uint32_t pkt)
+{
+    midi_enqueue(pkt, 1u);
+}
+
 /* a MIDI packet out: the port has no MIDI out, so the packet goes nowhere */
 static void midi_out_event(uint32_t pkt)
 {

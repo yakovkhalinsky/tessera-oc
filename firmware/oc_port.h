@@ -50,6 +50,10 @@ uint8_t oc_playing(void);
  * arrives on the module's first digital input as clock pulses */
 void oc_clock_source(uint8_t source);
 
+/* a MIDI packet in, from the module's USB (the USB-MIDI four bytes: the cable,
+ * the status, the two data bytes) */
+void oc_midi_in(uint32_t pkt);
+
 /* a clock pulse from the external clock (the engine's own MIDI clock path:
  * the pulses are what it follows) */
 void oc_clock_pulse(void);
