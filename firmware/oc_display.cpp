@@ -18,7 +18,10 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <stdint.h>
+#include <string.h>
 #include "oc_port.h"
+#include "oc_spi.h"
+#include "oc_version.h"
 #include "mono_font.h"     /* Tessera's 5 x 7 face (the engine's) */
 
 #define OLED_DC 6
@@ -75,8 +78,12 @@ void oc_display_init(void)
     digitalWriteFast(OLED_RST, HIGH);
     delay(1);
 
+    /* the init sequence, on the bus alone (the tick is not running yet, but
+     * the lock is the rule: the DAC never writes over the display) */
+    oc_spi_lock();
     for (uint32_t i = 0; i < sizeof OLED_INIT; i++)
         oled_command(OLED_INIT[i]);
+    oc_spi_unlock();
     memset(display_fb, 0, sizeof display_fb);
     oc_display_flush();
 }
@@ -132,9 +139,19 @@ void oc_display_text(int32_t x, int32_t y, const char *s)
     }
 }
 
-/* the screen to the panel: a page at a time, the column address at 2 */
+/* the screen to the panel: a page at a time, the column address at 2
+ *
+ * The bus is the DAC's too, and the DAC is written from the module's tick
+ * (the interrupt): so the flush takes the bus for as long as it is on it, and
+ * the tick's DAC write waits for the main loop to be done (oc_cv_service). */
 void oc_display_flush(void)
 {
+    /* the display's own settings: eight bits a byte, the mode the SH1106
+     * wants. The DAC leaves the bus as it found it, but the flush sets it
+     * anyway: the two devices share the peripheral. The bus is taken before
+     * the settings, so the tick's DAC write cannot slip in between them. */
+    oc_spi_lock();
+    SPI.beginTransaction(SPISettings(12000000, MSBFIRST, SPI_MODE0));
     for (uint32_t page = 0; page < DISPLAY_PAGES; page++) {
         digitalWriteFast(OLED_DC, LOW);
         oled_select();
@@ -146,4 +163,17 @@ void oc_display_flush(void)
             SPI.transfer(display_fb[page * DISPLAY_W + x]);
         oled_release();
     }
+    SPI.endTransaction();
+    oc_spi_unlock();
+}
+
+/* the splash: the module's name and the firmware's version, so a module that
+ * boots says so (and which firmware it runs) before the engine's own screen
+ * takes over. */
+void oc_display_splash(void)
+{
+    memset(display_fb, 0, sizeof display_fb);
+    oc_display_text((DISPLAY_W - 10 * 6) / 2, 20, "TESSERA-OC");
+    oc_display_text((DISPLAY_W - (int32_t)strlen(OC_VERSION_STRING) * 6) / 2, 36, OC_VERSION_STRING);
+    oc_display_flush();
 }
