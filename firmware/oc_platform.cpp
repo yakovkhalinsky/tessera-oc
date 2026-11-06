@@ -85,6 +85,19 @@ static void oc_cal_load(void)
     oc_cal_valid = true;
 }
 
+/* the same range, mapped straight: the fallback for a module with no
+ * calibration (or one the port cannot read). The o_C's own range: the Vbias
+ * is asymmetric, so the output spans -3 V to +7 V, MIDI note 0 to 120. */
+#define OC_CV_MIN_MV (-3000)
+#define OC_CV_MAX_MV (7000)
+static uint32_t oc_note_to_code_linear(uint32_t note)
+{
+    int32_t mv = ((int32_t)note - 36) * 1000 / 12 + OC_CV_MIN_MV;
+    if (mv < 0) mv = 0;
+    if (mv > OC_CV_MAX_MV - OC_CV_MIN_MV) mv = OC_CV_MAX_MV - OC_CV_MIN_MV;
+    return (uint32_t)((uint64_t)mv * 65535u / (uint64_t)(OC_CV_MAX_MV - OC_CV_MIN_MV));
+}
+
 /* a note as the DAC's code: the o_C's own mapping (its kOctaveZero, its
  * calibration table, the linear interpolation inside an octave) */
 static uint32_t oc_note_to_code(uint32_t note)
@@ -93,7 +106,7 @@ static uint32_t oc_note_to_code(uint32_t note)
     int32_t octave, fractional;
     uint16_t lo, hi;
     if (!oc_cal_valid)
-        return 0;
+        return oc_note_to_code_linear(note);
     pitch += OC_OCTAVE_ZERO * OC_OCTAVE_UNITS;
     if (pitch < 0) pitch = 0;
     if (pitch > DAC_OCTAVES * OC_OCTAVE_UNITS) pitch = DAC_OCTAVES * OC_OCTAVE_UNITS;
