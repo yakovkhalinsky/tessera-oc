@@ -220,6 +220,7 @@ void oc_display_init(void);
 void ui_init(void);
 void ui_input(void);
 void ui_draw(void);
+void ui_page_next(int32_t dir);
 
 void setup(void)
 {

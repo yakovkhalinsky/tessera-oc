@@ -14,6 +14,8 @@
 
 #include <stdint.h>
 
+#include "param_desc.h"     /* the engine's parameter descriptor (core.h has it too) */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +67,25 @@ uint8_t oc_track_generator(uint32_t track);
 int32_t oc_track_octave(uint32_t track);
 int16_t oc_tempo(void);
 void oc_set_tempo(int16_t bpm);
+
+/* the parameters, as the screen shows them: the descriptor (the label, the
+ * range, the format, the names), the name, the value and the value's text */
+const param_desc_t *oc_tx_desc(uint32_t tx);
+const param_desc_t *oc_track_desc(uint32_t id);
+const char *oc_param_name(uint32_t pid);
+void oc_param_format(const param_desc_t *d, int32_t v, char *val, const char **unit);
+int32_t oc_tx_get(uint32_t tr, uint32_t tx);
+void oc_tx_set(uint32_t tr, uint32_t tx, int32_t v);
+int32_t oc_track_param_get(uint32_t tr, uint32_t id);
+void oc_track_param_set(uint32_t tr, uint32_t id, int32_t v);
+
+/* the rows the screen shows: the generator's own knobs, and the track's key
+ * and scale. The ids are the engine's: the port asks for the list. */
+const uint8_t *oc_gen_rows(uint32_t gen, uint8_t *count);
+const uint8_t *oc_scl_rows(uint8_t *count);
+
+/* the track's generator */
+void oc_set_generator(uint32_t tr, int32_t mode);
 
 /* --- the platform's side --- */
 
