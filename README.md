@@ -57,10 +57,13 @@ the shared generator test runs against the FM-1's own baseline, **342 checks, no
 failing**. The two checks it skips are the ones that read the synth's voices (the pitch
 accumulator, ENERGY's drone): they need a synth, and the port has none.
 
-The current release is **v0.1.1** ([CHANGELOG.md](CHANGELOG.md)): the v0.1.0
+The current release is **v0.1.2** ([CHANGELOG.md](CHANGELOG.md)): the v0.1.0
 firmware bootlooped on the module (the engine's `.pool` was an orphan section
-that nothing ever wrote), and this one fixes that and the other faults the port
-had. **v0.1.1 is untested on hardware until Yakov confirms it.**
+that nothing ever wrote), v0.1.1 fixed that but faulted in the engine's
+`pattern_init()` (the MPU's stack-overflow trap was misaligned and covered the
+engine's RAM), and this one fixes that, makes the storage read only, and adds
+the diagnostics that say where a boot stopped. **v0.1.2 is untested on
+hardware until Yakov confirms it.**
 
 ---
 
@@ -160,7 +163,29 @@ The last one is the check that would have caught the v0.1.0 bootloop: the engine
 `.pool` was an orphan section (the Teensy's linker script knows nothing of it), so
 nothing ever wrote it, and the engine ran on garbage. The port's own linker script
 (`firmware/oc_imxrt1062.ld`) puts it in the range the startup clears, and the check
-makes sure it stays there.
+makes sure it stays there. It also checks the MPU's stack-overflow trap (the v0.1.1
+fault: `_ebss` was not 32-aligned, so the trap covered the engine's RAM), the
+persistent diagnostics word, and the stack's headroom.
+
+### Flashing
+
+> **⚠️ A flash erases the module's settings and its presets.**
+>
+> A Teensy Loader upload erases the program flash outside the EEPROM emulation.
+> The o_C's own firmware keeps its settings and its presets in that flash (a
+> LittleFS drive at the end of it), so **they are gone after a flash**. Export
+> them over USB first, and put them back afterwards.
+>
+> The **calibration survives**: it lives in the EEPROM, and the flash does not
+> touch the EEPROM.
+>
+> This release's own firmware never writes the flash: the storage is read only
+> (the projects are read, never written), so flashing is the only thing that
+> changes it.
+
+```sh
+pio run -e T40 -t upload          # flash it (the module must be in normal mode)
+```
 
 ---
 

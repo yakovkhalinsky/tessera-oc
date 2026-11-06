@@ -6,13 +6,13 @@
 #ifndef OC_VERSION_H_
 #define OC_VERSION_H_
 
-#define OC_VERSION "0.1.1"
+#define OC_VERSION "0.1.2"
 
 #ifndef OC_VERSION_EXTRA
 #define OC_VERSION_EXTRA ""
 #endif
 
-/* the version as the screen shows it: "0.1.1_T40" */
+/* the version as the screen shows it: "0.1.2_T40" */
 #define OC_VERSION_STRING OC_VERSION OC_VERSION_EXTRA
 
 #endif
