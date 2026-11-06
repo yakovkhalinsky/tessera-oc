@@ -21,6 +21,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifndef OC_ENC_REV_PINS_21_22
+#define OC_ENC_REV_PINS_21_22 1
+#endif
+
 #include "oc_port.h"
 
 static int checks, failures;
@@ -175,6 +179,48 @@ static void check_encoders(void)
     check("a detent is a step, either way round", plain_left == 1 && flip_left == -1);
 }
 
+/* the physical shaft on pins 21/22 reads reversed: it is the left one in the
+ * default orientation and the right one in the flipped one, and it is the
+ * shaft, not the side, that is reversed (cf. Phazerville's
+ * ENCODER_CONFIG_L_REVERSED, OC_ui.cpp:70-71). */
+static void check_enc_rev_21_22(void)
+{
+    check("PLAIN left is the 21/22 shaft",
+          oc_enc_on_21_22(tabs[0].enc_l1, tabs[0].enc_l2));
+    check("PLAIN right is not the 21/22 shaft",
+          !oc_enc_on_21_22(tabs[0].enc_r1, tabs[0].enc_r2));
+    check("FLIP right is the 21/22 shaft",
+          oc_enc_on_21_22(tabs[1].enc_r1, tabs[1].enc_r2));
+    check("FLIP left is not the 21/22 shaft",
+          !oc_enc_on_21_22(tabs[1].enc_l1, tabs[1].enc_l2));
+
+    /* UI-level reverse matching oc_ui.cpp: synthetic +1 detent on that shaft → -1 */
+    {
+        int32_t s = 1;
+        if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(tabs[0].enc_l1, tabs[0].enc_l2))
+            s = -s;
+        check("PLAIN: 21/22 shaft (left) reverses at UI (+1→-1)", s == -1);
+    }
+    {
+        int32_t s = 1;
+        if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(tabs[0].enc_r1, tabs[0].enc_r2))
+            s = -s;
+        check("PLAIN: other shaft (right) unchanged", s == 1);
+    }
+    {
+        int32_t s = 1;
+        if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(tabs[1].enc_l1, tabs[1].enc_l2))
+            s = -s;
+        check("FLIP: other shaft (left) unchanged", s == 1);
+    }
+    {
+        int32_t s = 1;
+        if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(tabs[1].enc_r1, tabs[1].enc_r2))
+            s = -s;
+        check("FLIP: 21/22 shaft (right) reverses at UI (+1→-1)", s == -1);
+    }
+}
+
 /* the row the encoder moves: it ends, and it goes the way the encoder turned */
 static void check_row(void)
 {
@@ -193,6 +239,7 @@ int main(void)
     check_flipped();
     check_remap();
     check_encoders();
+    check_enc_rev_21_22();
     check_row();
 
     printf("oc_port: %d checks, %d failing\n", checks, failures);

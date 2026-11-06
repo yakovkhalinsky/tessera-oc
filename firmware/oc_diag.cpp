@@ -216,23 +216,29 @@ void oc_diag_crash(void)
     crash_len = 0;
     CrashReport.printTo(buf);
     crash_text[crash_len] = 0;
+    if (Serial)
+        Serial.write(crash_text, crash_len);
     snprintf(page, sizeof page, "PREV STAGE %u %s\n%s", (unsigned)oc_persist.prev_stage,
              oc_stage_name(oc_persist.prev_stage), crash_text);
     for (uint32_t i = 0; page[i]; i++) if (page[i] == '\n') lines++;
 
     pages = (lines + 6u) / 7u;
+    /* wait for release on entry, then a fresh press+release */
+    while (!digitalRead(oc_pins.but_top) || !digitalRead(oc_pins.but_bot))
+        delay(10);
     for (;;) {
         oc_display_clear();
         snprintf(head, sizeof head, "CRASH p/%u", (unsigned)(page_no + 1u));
         oc_display_text(0, 0, head);
         oc_lines(page, page_no * 7u, 8);
         oc_display_flush();
-        /* the top button is the next page, the bottom one goes on. It waits
-         * for the release, so a held button counts once. */
+        /* the top button is the next page, the bottom one goes on. The press
+         * must be fresh (the release was waited for above), and it waits for
+         * the release again, so a held button counts once. */
         int b = 0;
         while (!b) { b = !digitalRead(oc_pins.but_top) ? 1 : (!digitalRead(oc_pins.but_bot) ? 2 : 0); if (!b) delay(10); }
         delay(30);
-        while (digitalRead(b == 1 ? oc_pins.but_top : oc_pins.but_bot)) delay(10);
+        while (!digitalRead(b == 1 ? oc_pins.but_top : oc_pins.but_bot)) delay(10);
         if (b != 1) break;                 /* the bottom button: go on */
         page_no = (page_no + 1u) % pages;
     }

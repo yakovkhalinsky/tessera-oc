@@ -310,6 +310,9 @@ void ui_input(void)
 {
     uint32_t n = ui_build_rows();
     int32_t steps = encoder_step(&enc_left);
+    /* physical 21/22 shaft; cf. Phazerville ENCODER_CONFIG_L_REVERSED / OC_ui.cpp:70-71 */
+    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_left.pin_a, enc_left.pin_b))
+        steps = -steps;
     int32_t dir = steps < 0 ? -1 : 1;
     for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--) {
         /* the row moves the way the encoder turned, and wraps around */
@@ -320,6 +323,8 @@ void ui_input(void)
     }
 
     steps = encoder_step(&enc_right);
+    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_right.pin_a, enc_right.pin_b))
+        steps = -steps;
     dir = steps < 0 ? -1 : 1;
     for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--)
         ui_row_turn(&ui_rows[ui_row], dir);

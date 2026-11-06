@@ -184,6 +184,15 @@ static inline uint8_t oc_enc_row(uint8_t row, int32_t steps, uint32_t n)
     return row;
 }
 
+#ifndef OC_ENC_REV_PINS_21_22
+#define OC_ENC_REV_PINS_21_22 0
+#endif
+/* Physical shaft on pins 21/22 (PLAIN left / FLIP right). */
+static inline int oc_enc_on_21_22(uint8_t a, uint8_t b)
+{
+    return (a == 21u && b == 22u) || (a == 22u && b == 21u);
+}
+
 /* --- the diagnostics --- */
 /* The stage word (the persistent one), the timing, the crash report on the
  * screen and the safe mode. */
