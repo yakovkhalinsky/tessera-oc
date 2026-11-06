@@ -33,6 +33,7 @@ static uint32_t oc_ms(void) { return oc_samples * 1000u / FS; }
 #undef memcmp
 
 /* ------------------------------------------------------- base, engine --- */
+#include "oc_port.h"
 #include "core.h"
 #include "oc_hal.h"               /* the platform names the shared engine calls (the tick, the critical section) */
 #include "fm6_core.h"            /* the FM6 patch layout (the parameter registry names it) */
@@ -49,15 +50,15 @@ static uint32_t oc_ms(void) { return oc_samples * 1000u / FS; }
 #define MIDI_TIME_NOW() oc_ticks()
 #define MIDI_TICKS_PER_MS 1000u
 #endif
-#include "oc_state.c"             /* the input, the bend, the inert engine state */
-#include "oc_midi.c"              /* the MIDI queue (the module's USB MIDI) */
-#include "oc_engines.c"           /* the engine table (the port's own engine; the rest retired) */
+#include "../parts/oc_state.c"             /* the input, the bend, the inert engine state */
+#include "../parts/oc_midi.c"              /* the MIDI queue (the module's USB MIDI) */
+#include "../parts/oc_engines.c"           /* the engine table (the port's own engine; the rest retired) */
 #include "params.c"
 #include "mod.c"                  /* the modulation matrix (the LFO's SLEW, the note's VEL / KEY / RAND) */
 #include "seqtime.c"              /* the time base: a beat, a division */
 #include "seq_lfo.c"              /* the track's LFO and the part's voice mode */
-#include "oc_out.c"               /* the CV out, the gate and the MIDI out */
-#include "oc_voice.c"             /* the note layer (no voices: the note goes to the rig) */
+#include "../parts/oc_out.c"               /* the CV out, the gate and the MIDI out */
+#include "../parts/oc_voice.c"             /* the note layer (no voices: the note goes to the rig) */
 
 /* ------------------------------------------------- MIDI, sequencer --- */
 #include "tessera.h"
@@ -95,7 +96,7 @@ static void oc_block(uint32_t n)
 
 /* The port's boot: the defaults and the empty patterns (as melodee_init on the
  * FM-1: song.g and the tracks' own parameters take their table's defaults). */
-static void oc_init(void)
+void oc_engine_init(void)
 {
     uint32_t i, k;
     pattern_init();
@@ -107,10 +108,19 @@ static void oc_init(void)
     song.master_q12 = 4096;
 }
 
-/* The blocks a run of samples is worth: the FM-1's cadence, so the engine sees
- * the same clock. The remainder is kept for the next call. */
+/* Is the transport running? */
+uint8_t oc_playing(void) { return song.playing ? 1u : 0u; }
+
+/* The transport: the platform's buttons (the UI comes later). */
+void oc_transport(uint8_t request)
+{
+    transport_req = request;
+}
+
+/* The clock: the samples that passed. The blocks keep the FM-1's cadence (one
+ * every CTL samples), so the engine sees the same clock it always did. */
 static uint32_t oc_block_acc;            /* the samples not yet a whole block */
-static void oc_run(uint32_t samples)
+void oc_clock_advance(uint32_t samples)
 {
     oc_samples += samples;
     oc_block_acc += samples;
@@ -119,3 +129,6 @@ static void oc_run(uint32_t samples)
         oc_block(CTL);
     }
 }
+
+/* the sample rate the engine counts at */
+uint32_t oc_sample_rate(void) { return FS; }

@@ -47,7 +47,7 @@ whole work stays under the licence of the engine it carries.
 |---|---|---|
 | **0** | The survey and the plan ([PORT-PLAN.md](PORT-PLAN.md)) | done |
 | **1** | The engine without an audio path: the time base, the LFO and the engine constants split out of the audio files, and the o_C engine built on them | **done** |
-| **2** | The platform layer: the module's tick, the CV and gate outputs, the MIDI port, the SD or flash storage, the encoders and the buttons | next |
+| **2** | The platform layer: the module's tick, the CV and gate outputs, the encoders, the buttons and the storage | **started** |
 | **3** | The output mapping: the notes to CV, gates and MIDI; the clock out | |
 | **4** | The UI, in the o_C idiom: two encoders, four buttons, a 128×64 display | |
 | **5** | Packaging: the PlatformIO build, the flash, the rig | |

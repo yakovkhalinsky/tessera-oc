@@ -27,7 +27,7 @@
 static void mix_block(int32_t *out, uint32_t n)
 {
     (void)out;
-    oc_run(n);
+    oc_clock_advance(n);
 }
 
 /* the platform's side on the host: the CV out and the gate are recorded, not
@@ -35,11 +35,11 @@ static void mix_block(int32_t *out, uint32_t n)
 static uint32_t oc_cv_last[NPART];                   /* the last code on each CV out */
 static uint32_t oc_gate_state[NPART];               /* the gate's state */
 static uint32_t oc_gate_edges;                      /* the gate's changes, all the outs together */
-static void oc_cv_write(uint32_t ch, uint32_t code)
+void oc_cv_write(uint32_t ch, uint32_t note)
 {
-    if (ch < NPART) oc_cv_last[ch] = code;
+    if (ch < NPART) oc_cv_last[ch] = note;
 }
-static void oc_gate_write(uint32_t ch, uint32_t on)
+void oc_gate_write(uint32_t ch, uint32_t on)
 {
     if (ch < NPART && oc_gate_state[ch] != (on ? 1u : 0u)) {
         oc_gate_state[ch] = on ? 1u : 0u;
@@ -70,7 +70,7 @@ static uint32_t started_since(const track_t *t, uint32_t a0)
 /* the defaults and the empty patterns (as melodee_init on the FM-1) */
 static void host_tracks_init(void)
 {
-    oc_init();
+    oc_engine_init();
 }
 
 /* the port has no demo renderer: the test's own main follows */

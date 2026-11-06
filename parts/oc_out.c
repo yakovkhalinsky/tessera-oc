@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Theo Dainis (melodee-tess) */
+#include "oc_port.h"
 /* The o_C port's output: a note goes to the rig as CV (the pitch) and as a gate
  * or a trigger. No MIDI: the module is a sequencer for the rig, not a voice in
  * it, and the rig reads CV and gates.
@@ -37,52 +38,35 @@
  * output spans -3 V to +7 V, MIDI note 0 to 120. The DAC is not linear enough
  * to be trusted over that span, so the codes come from the module's own
  * calibration table (per channel, per octave, in its EEPROM) rather than from
- * a straight line - Phase 2 reads it.
+ * a straight line.
  *
- * The platform writes what comes out of here (oc_cv_write, oc_gate_write). */
+ * So the engine hands the platform a *note*, and the platform turns it into the
+ * DAC's code the way the o_C does (its kOctaveZero, its calibration): the
+ * engine knows the music, the platform knows the module. */
 
-/* the CV out's scale, in millivolts a semitone, Q8 */
-#define OC_MV_PER_SEMITONE_1VOCT 21333u   /* 1000/12 mV, Q8 */
-#define OC_MV_PER_SEMITONE_01VOCT 2133u    /* 100/12 mV, Q8 */
-/* the reference: the note at 0 V (the o_C's own: MIDI 36, C2, with the T4.0's
- * kOctaveZero = 3 - the module's MIDI CV() and NoteNumber() agree with it) */
-#define OC_CV_REFERENCE 36u
 /* a trigger's pulse: wide enough for a slow gate input */
 #define OC_TRIG_MS 5u
 #define OC_TRIG_TICKS (FS * OC_TRIG_MS / 1000u)
-/* the CV out's range, in millivolts: the module's asymmetric Vbias, -3 V to +7 V */
-#define OC_CV_MIN_MV (-3000)
-#define OC_CV_MAX_MV (7000)
-#define OC_CV_CODES 65535u
-
-/* the platform's side: the DAC and the digital outs */
-static void oc_cv_write(uint32_t ch, uint32_t code);
-static void oc_gate_write(uint32_t ch, uint32_t on);
-
 /* what a track's digital out carries */
 enum { OC_OUT_GATE, OC_OUT_TRIG, OC_OUT_CLOCK };
 static uint8_t oc_out_mode[NTRK];          /* the track's own setting */
 static uint32_t oc_trig_until[NTRK];       /* the tick its trigger pulse ends at */
 
-/* the CV out's scale: 0 = 1 V an octave, 1 = 0.1 V */
-static uint32_t oc_cv_scale;               /* the project's setting */
-static int32_t oc_cv_octave;               /* the project's octave offset */
+/* the project's octave offset: every track's CV with it */
+static int32_t oc_cv_octave;
 
-/* a note as the CV out's code. The track's own octave (P_E0) and the project's
- * octave offset move it; the transpose (P_TRANS) is in semitones. */
-static uint32_t oc_cv_code(uint32_t part, uint32_t note)
+/* a note as the port's note: the track's own octave (P_E0) and the project's
+ * octave offset move it. The platform puts it at the module's own reference
+ * (0 V = MIDI 36, C2, the T4.0's kOctaveZero = 3) and turns it into the DAC's
+ * code through the module's calibration. */
+static uint32_t oc_cv_note(uint32_t part, uint32_t note)
 {
-    int32_t semitones = (int32_t)note - (int32_t)OC_CV_REFERENCE;
-    uint32_t q8 = oc_cv_scale ? OC_MV_PER_SEMITONE_01VOCT : OC_MV_PER_SEMITONE_1VOCT;
-    int32_t mv;
+    int32_t n = (int32_t)note + oc_cv_octave * 12;
     if (part < NPART)
-        semitones += (int32_t)trk[part].p[P_E0] * 12;
-    semitones += oc_cv_octave * 12;
-    mv = (semitones * (int32_t)q8) >> 8;
-    mv += OC_CV_MIN_MV;
-    if (mv < 0) mv = 0;
-    if (mv > OC_CV_MAX_MV - OC_CV_MIN_MV) mv = OC_CV_MAX_MV - OC_CV_MIN_MV;
-    return (uint32_t)((uint64_t)mv * OC_CV_CODES / (uint64_t)(OC_CV_MAX_MV - OC_CV_MIN_MV));
+        n += (int32_t)trk[part].p[P_E0] * 12;
+    if (n < 0) n = 0;
+    if (n > 127) n = 127;
+    return (uint32_t)n;
 }
 
 /* a note on: its pitch on the track's CV out, and its gate or its trigger */
@@ -91,7 +75,7 @@ static void oc_note_on(uint32_t part, uint32_t note, uint32_t vel)
     (void)vel;
     if (part >= NPART)
         return;
-    oc_cv_write(part, oc_cv_code(part, note));
+    oc_cv_write(part, oc_cv_note(part, note));
     if (oc_out_mode[part] == OC_OUT_TRIG) {
         oc_trig_until[part] = oc_ticks() + OC_TRIG_TICKS;  /* a pulse at the note's onset */
         oc_gate_write(part, 1);
@@ -114,7 +98,7 @@ static void oc_note_off(uint32_t part, uint32_t note)
 
 /* the module's tick: a trigger's pulse ends on its own, and a track whose out
  * carries the clock writes it (Phase 2). */
-static void oc_out_tick(void)
+void oc_out_tick(void)
 {
     uint32_t now = oc_ticks(), i;
     for (i = 0; i < NTRK; i++)
