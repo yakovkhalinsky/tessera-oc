@@ -155,7 +155,6 @@ The device build (Phase 5) is a PlatformIO project for the Teensy 4.0:
 
 ```sh
 pio run -e T40                        # build
-pio run -e T40 -t upload              # flash it (the module must be in normal mode)
 python3 tools/check_sections.py       # the memory map: no orphan RAM, nothing unwritten
 ```
 
