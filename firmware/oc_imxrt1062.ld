@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Yakov Khalinsky */
-/* The o_C port's memory map: the Teensy 4.0's own, with the engine's RAM
- * sections put where the startup clears them.
+/* The o_C port's memory map: the Teensy 4.0's own script, with the engine's
+ * RAM sections put where the startup clears them.
  *
- * Why this file exists (the v0.1.0 bootloop):
+ * Why this file exists (the v0.1.0 bootloop, and the v0.1.2 fault):
  *
  * The engine is the vendored Tessera's, and it keeps its big buffers in two
  * sections of its own: .pool (the FM-1's zero-initialised working buffers) and
@@ -11,17 +11,34 @@
  * imxrt1062.ld knows neither of them, so the linker orphans them: they land
  * between the copied .data and the cleared .bss, in a gap that no startup code
  * touches. Nothing ever writes them, so the engine starts on whatever the RAM
- * happened to hold - and the first timer tick reads it and faults.
+ * happened to hold - and the first timer tick reads it and faults. (v0.1.0.)
  *
- * So this is the Teensy's script with the two sections inside .bss: the
- * startup clears _sbss.._ebss, and the engine's buffers are cleared with it,
- * before setup() runs. (On the FM-1 the .pool is a bank of its own and the
- * boot clears it by hand; here the startup does it.)
+ * The first fix put the two sections in .bss as sections of their own, and
+ * pointed _ebss at the end of .noinit. That was not enough, and the v0.1.1
+ * firmware faulted at the first tick, in the engine's pattern_init(), with a
+ * memset at 0x200272A0 - the last bytes of .noinit.
  *
- * The .noinit is cleared too: the only things in it in this build are the
- * pattern bank (which the engine's own pattern_init() clears) and the FM-1's
- * bootguard, which the port does not use - the port has no UBOOT fallback,
- * and the crash report over the USB serial is the diagnostic instead. */
+ * The reason is the MPU. The Teensy's startup arms a 32-byte NOACCESS region
+ * at &_ebss, to catch a stack overflow (startup.c: "trap stack overflow"), and
+ * an MPU region of 32 bytes must start on a 32-byte boundary. With _ebss at
+ * the end of .noinit, that end was 0x200272BC - not a multiple of 32 - so the
+ * hardware rounded the region down to 0x200272A0 and the trap covered the tail
+ * of .noinit instead of the empty space behind it. The memset then wrote into
+ * the trap and the module died.
+ *
+ * So the script is now the Teensy's own, with two deltas:
+ *
+ *   1. .bss is NOLOAD: it holds no initialised data, and saying so keeps it
+ *      NOBITS (the map check wants that).
+ *   2. the engine's .pool and .noinit are inputs of .bss, not sections of
+ *      their own: the startup clears them with .bss, and _ebss - the end of
+ *      .bss - is then the aligned end of everything, so the MPU's trap lands
+ *      in the empty space behind the RAM, where it belongs.
+ *
+ * The rest of the file is the Teensy 4.0's imxrt1062.ld, unchanged (the
+ * framework the build uses: teensy 6.0.0, framework-arduinoteensy 1.162.0).
+ * tools/check_sections.py checks the result: _ebss 32-aligned, nothing in the
+ * trap, .bss NOBITS, and the stack's headroom. */
 
 MEMORY
 {
@@ -83,21 +100,21 @@ SECTIONS
    		 KEEP(*(.vectorsram))
 	} > DTCM  AT> FLASH
 
-	.bss ALIGN(4) : {
+	.bss ALIGN(4) (NOLOAD) : {
 		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
 		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(COMMON)))
+		/* the engine's own RAM, in the range the startup clears: the FM-1's
+		 * .pool (its zero-initialised working buffers) and its .noinit. The
+		 * Teensy's own script orphans them - they land between the copied
+		 * .data and the cleared .bss, and nothing ever writes them, so the
+		 * engine starts on garbage: the v0.1.0 bootloop. They are inputs of
+		 * .bss here, so the startup clears them with it, and _ebss (the end
+		 * of .bss) stays 32-aligned for the MPU's stack-overflow trap. */
+		*(.pool*)
+		*(.noinit*)
 		. = ALIGN(32);
 		. = . + 32; /* MPU to trap stack overflow */
 	} > DTCM
-
-	/* The engine's own RAM, in the range the startup clears: the FM-1's
-	 * .pool (its zero-initialised working buffers) and its .noinit. The
-	 * Teensy's own script orphans them - they land between the copied .data
-	 * and the cleared .bss, and nothing ever writes them, so the engine
-	 * starts on garbage: the v0.1.0 bootloop. NOLOAD, so they cost no
-	 * flash; the startup clears them with .bss. */
-	.pool (NOLOAD) : { *(.pool*) . = ALIGN(4); } > DTCM
-	.noinit (NOLOAD) : { *(.noinit*) . = ALIGN(4); } > DTCM
 
 	.bss.dma (NOLOAD) : {
 		*(.hab_log)
@@ -121,7 +138,7 @@ SECTIONS
 	_sdataload = LOADADDR(.data);
 
 	_sbss = ADDR(.bss);
-	_ebss = ADDR(.noinit) + SIZEOF(.noinit);
+	_ebss = ADDR(.bss) + SIZEOF(.bss);
 
 	_heap_start = ADDR(.bss.dma) + SIZEOF(.bss.dma);
 	_heap_end = ORIGIN(RAM) + LENGTH(RAM);
