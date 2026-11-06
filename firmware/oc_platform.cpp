@@ -125,8 +125,10 @@ void oc_cv_write(uint32_t ch, uint32_t note)
         return;
     code = oc_note_to_code(note);
     code = DAC_MAX - code;                    /* the DAC's output is inverted */
+    digitalWrite(PIN_DAC_CS, LOW);
     SPI.transfer16(DAC_CMD(ch));               /* the command */
     SPI.transfer16((uint16_t)code);            /* the data */
+    digitalWrite(PIN_DAC_CS, HIGH);
 }
 
 /* a digital out: a gate, a trigger or a clock */
@@ -157,17 +159,19 @@ static IntervalTimer oc_timer;
 #define OC_CLOCK_PULSES_TO_FOLLOW 24u    /* a beat, before the port follows */
 static uint8_t oc_clock_level;
 static uint32_t oc_clock_pulses;
-static uint8_t oc_clock_following;
+static uint8_t oc_clock_on;                  /* the engine is following the rig */
+
+uint8_t oc_clock_following(void) { return oc_clock_on; }
 
 static void oc_clock_watch(void)
 {
     uint8_t level = digitalReadFast(PIN_TR1);
     if (level && !oc_clock_level) {              /* a rising edge: a pulse */
         oc_clock_pulses++;
-        if (oc_clock_following)
+        if (oc_clock_on)
             oc_clock_pulse();
         else if (oc_clock_pulses >= OC_CLOCK_PULSES_TO_FOLLOW) {
-            oc_clock_following = 1;
+            oc_clock_on = 1;
             oc_clock_source(2);                  /* the engine takes the clock */
             oc_clock_start();                   /* and starts on it */
         }
@@ -211,6 +215,12 @@ static uint8_t oc_buttons_edges(void)
     return edges;
 }
 
+/* the screen and its controls */
+void oc_display_init(void);
+void ui_init(void);
+void ui_input(void);
+void ui_draw(void);
+
 void setup(void)
 {
     pinMode(PIN_TR1, INPUT_PULLDOWN);           /* the rig's clock in (see oc_clock_watch) */
@@ -223,9 +233,16 @@ void setup(void)
     digitalWrite(PIN_DAC_RST, HIGH);
     pinMode(PIN_DAC_RST, OUTPUT);
 
-    /* the DAC's chip select is the SPI0's own pin (the o_C remuxes it) */
-    IOMUXC_SW_MUX_CTL_PAD_GPIO_B0_00 = 3;
+    /* The DAC and the OLED share the SPI bus and must never see each other's
+     * bits. So neither of them uses the library's chip select: the library's
+     * goes to a spare pin (37), and the DAC's own select (10) and the OLED's
+     * (8) are plain pins, driven by hand around each transfer. The library
+     * would otherwise hold the DAC's select low for the display's traffic. */
     SPI.begin();
+    SPI.setCS(37);
+    IOMUXC_SW_MUX_CTL_PAD_GPIO_B0_00 = 5;   /* pin 10 back to a plain pin: the DAC's select */
+    pinMode(PIN_DAC_CS, OUTPUT);
+    digitalWrite(PIN_DAC_CS, HIGH);
     SPI.beginTransaction(SPISettings(12000000, MSBFIRST, SPI_MODE0));
 
     /* the DAC's reset: low, then high (the o_C's own sequence) */
@@ -237,6 +254,8 @@ void setup(void)
     oc_cal_load();
     oc_engine_init();
     oc_power_on();
+    oc_display_init();
+    ui_init();
 
     oc_timer.begin(oc_tick, OC_TICK_US);
     oc_timer.priority(128);
@@ -245,10 +264,14 @@ void setup(void)
 void loop(void)
 {
     uint8_t buttons = oc_buttons_edges();
+    static uint32_t last_draw;
     if (buttons & BUT_TOP)
         oc_transport(oc_playing ? 2u : 1u);    /* stop, or start */
     if (buttons & BUT_BOT)
         oc_transport(3u);                      /* restart from the top */
-    if (buttons & (BUT_L | BUT_R))
-        ;                                       /* the UI's business (Phase 4) */
+    ui_input();
+    if (millis() - last_draw >= 100u) {          /* ten screens a second */
+        last_draw = millis();
+        ui_draw();
+    }
 }

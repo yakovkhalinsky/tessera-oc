@@ -140,3 +140,4 @@ uint32_t oc_sample_rate(void) { return FS; }
 
 #include "../parts/oc_boot.c"   /* the power-on (it needs the transport, above) */
 #include "../parts/oc_clock.c"  /* the external clock (the engine's MIDI clock path) */
+#include "../parts/oc_view.c"   /* what the screen shows (the engine's state) */

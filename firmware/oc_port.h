@@ -54,6 +54,18 @@ void oc_clock_pulse(void);
 /* a start from the external clock */
 void oc_clock_start(void);
 
+/* is the port following an external clock? (the platform knows) */
+uint8_t oc_clock_following(void);
+
+/* what the screen shows: the selected track, a track's generator, the tempo
+ * and a track's octave on its CV out */
+uint8_t oc_selected_track(void);
+void oc_select_track(uint8_t track);
+uint8_t oc_track_generator(uint32_t track);
+int32_t oc_track_octave(uint32_t track);
+int16_t oc_tempo(void);
+void oc_set_tempo(int16_t bpm);
+
 /* --- the platform's side --- */
 
 /* the CV out: the note for the channel (a MIDI note number, 0..127). The
