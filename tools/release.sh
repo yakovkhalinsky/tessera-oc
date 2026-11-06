@@ -40,13 +40,18 @@ the module's reset button when the app asks for it. Or from a shell:
     teensy_loader_cli --mcu=TEENSY40 -w tessera-oc-T40.hex
 
 What it does: Tessera's generators, song forms, harmony and modulation
-matrix, driving the module's CV outs (1 V an octave, the o_C's own
-convention) and its digital outs as gates, triggers or the clock. No
-audio: the module composes, the rig plays.
+matrix, driving the module's four CV outs (1 V an octave, the o_C's own
+convention). The module has no digital outs - its four trigger jacks are
+inputs - so the gate rides on the CV: a CV carries its pitch while the note
+sounds and rests at 0 V otherwise. No audio: the module composes, the rig
+plays.
 
 The screen shows the tempo, the transport and the four tracks; the left
 encoder moves down the list, the right one turns the value, the top and
 bottom buttons change the page.
+
+$VERSION: UNTESTED ON HARDWARE until Yakov confirms it. The changelog is in
+the repository (CHANGELOG.md).
 EOF
 
 echo "publishing $VERSION"
