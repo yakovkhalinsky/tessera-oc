@@ -79,10 +79,20 @@ void oc_display_init(void)
     delay(1);
 
     /* the init sequence, on the bus alone (the tick is not running yet, but
-     * the lock is the rule: the DAC never writes over the display) */
+     * the lock is the rule: the DAC never writes over the display). The
+     * segment and the COM are the module's own: a screen that is the other
+     * way round (the calibration's FLIPSCREEN flag) takes 0xa0 and 0xc0. */
     oc_spi_lock();
-    for (uint32_t i = 0; i < sizeof OLED_INIT; i++)
-        oled_command(OLED_INIT[i]);
+    for (uint32_t i = 0; i < sizeof OLED_INIT; i++) {
+        uint8_t c = OLED_INIT[i];
+        if (oc_cal_flags & OC_CAL_FLIPSCREEN) {
+            if (c == 0xa1)
+                c = 0xa0;                   /* the segment */
+            else if (c == 0xc8)
+                c = 0xc0;                   /* the COM */
+        }
+        oled_command(c);
+    }
     oc_spi_unlock();
     memset(display_fb, 0, sizeof display_fb);
     oc_display_flush();
@@ -156,7 +166,9 @@ void oc_display_flush(void)
         digitalWriteFast(OLED_DC, LOW);
         oled_select();
         SPI.transfer(0x10);            /* the column's high bits */
-        SPI.transfer(0x02);            /* the column's low bits: 2 (the SH1106's RAM is 132 wide) */
+        SPI.transfer(oc_cal_display_offset);  /* the column's low bits: the
+                                                * calibration's (the SH1106's
+                                                * RAM is 132 wide) */
         SPI.transfer(0xB0 | page);     /* the page */
         digitalWriteFast(OLED_DC, HIGH);
         for (uint32_t x = 0; x < DISPLAY_W; x++)
