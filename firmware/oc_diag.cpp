@@ -7,11 +7,12 @@
  * on it and no log. So the module says what happened to itself, on its own
  * screen, and it says it across a reset.
  *
- * The stage word is that memory: a small struct in the AXI RAM (the
- * framework's .bss.dma, which the startup does not clear), so the stage the
- * module reached when it died is still there when it comes back. Every write
- * flushes the cache (the AXI RAM is write-back cached) and is mirrored to the
- * framework's crash breadcrumbs.
+ * The stage word is that memory: a small struct in its own section at the end
+ * of the AXI RAM (.oc_persist, 0x2027FF40 - the start of the AXI RAM is wiped
+ * by the boot ROM, and the DTCM's .bss is cleared by the startup), so the stage
+ * the module reached when it died is still there when it comes back. Every
+ * write flushes the cache (the AXI RAM is write-back cached) and is mirrored to
+ * the framework's crash breadcrumbs.
  *
  * The stages are the boot's, in order: 10 setup, 11 the pins, 12 the SPI,
  * 13 the DAC, 14 the calibration, 15 the display, 16 the splash, 17 the
@@ -37,11 +38,21 @@ void oc_display_flush(void);
 
 /* ------------------------------------------------------- the stage word --- */
 
-/* The persistent word. It lives in RAM2 (.bss.dma, the AXI bus), which the
- * startup does not clear - the DTCM's .bss is cleared, this is not. */
+/* The persistent word. It lives in its own section, .oc_persist, at the end of
+ * the AXI RAM (0x2027FF40) - just below the framework's fault info, which the
+ * startup writes at 0x2027FF80 (cores/teensy4/startup.c:635). The start of the
+ * AXI RAM is not safe across a reset (the boot ROM and the HAB may wipe it) and
+ * the DTCM's .bss is cleared by the startup; the end of the AXI RAM is neither,
+ * which is why the framework keeps its fault info there. */
 struct oc_persist_t { uint32_t magic, build, stage, prev_stage, loop_n, blk_max_cyc, boots, sum; };
 
-DMAMEM volatile struct oc_persist_t oc_persist;
+__attribute__((section(".oc_persist"), used))
+volatile struct oc_persist_t oc_persist;
+
+/* Was the word there before this boot? A cold boot (the RAM's contents are
+ * whatever they were) is not a reset in the middle of a run, and it must not
+ * be reported as one. */
+static bool oc_persist_warm;
 
 #define OC_PERSIST_MAGIC 0x32434F54u    /* 'TOC2' */
 #define OC_PERSIST_WORDS (sizeof(struct oc_persist_t) / 4)
@@ -129,8 +140,10 @@ void oc_diag_begin(void)
         for (uint32_t i = 0; i < OC_PERSIST_WORDS; i++) w[i] = 0;
         oc_persist.magic = OC_PERSIST_MAGIC;
         oc_persist.build = oc_build_word();
+        oc_persist_warm = false;              /* a cold boot: nothing to report */
     } else {
         oc_persist.prev_stage = oc_persist.stage;
+        oc_persist_warm = true;               /* the word was there: a warm boot */
     }
     oc_persist.boots++;
     oc_persist.stage = 0;
@@ -187,10 +200,16 @@ void oc_diag_crash(void)
 
     if (!CrashReport) {
         /* No crash report: but the last run did not get to the end (a reset in
-         * the middle of the boot), so the screen says where it stopped. */
-        snprintf(page, sizeof page, "RESET AT STAGE %u", (unsigned)oc_persist.prev_stage);
-        oc_diag_screen(page);
-        delay(5000);
+         * the middle of the boot), so the screen says where it stopped. Only
+         * a warm boot has a last run to speak of: on a cold boot the word was
+         * made here and there is nothing to report. The stages that say the
+         * run got to the end (23 done, 99 running) are not a reset either. */
+        uint32_t ps = oc_persist.prev_stage;
+        if (oc_persist_warm && ps != 0u && ps != 23u && ps != 99u) {
+            snprintf(page, sizeof page, "RESET AT STAGE %u", (unsigned)ps);
+            oc_diag_screen(page);
+            delay(5000);
+        }
         return;
     }
 

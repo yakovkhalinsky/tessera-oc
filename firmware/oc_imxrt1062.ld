@@ -113,6 +113,16 @@ SECTIONS
 		. = ALIGN(32);
 	} > RAM
 
+	/* The diagnostics word: the end of the AXI RAM, 64 bytes below the
+	 * framework's fault info (which the startup writes at 0x2027FF80,
+	 * cores/teensy4/startup.c:635). The start of the AXI RAM is not safe
+	 * across a reset (the boot ROM and the HAB may wipe it) and the DTCM's
+	 * .bss is cleared; the end of the AXI RAM is neither, which is why the
+	 * framework keeps its fault info there. The word is 32 bytes. */
+	.oc_persist 0x2027FF40 (NOLOAD) : {
+		KEEP(*(.oc_persist))
+	} > RAM
+
 	.text.csf : {
 		FILL(0xFF)
 		. = ALIGN(1024);
@@ -132,7 +142,9 @@ SECTIONS
 	_ebss = ADDR(.bss) + SIZEOF(.bss);
 
 	_heap_start = ADDR(.bss.dma) + SIZEOF(.bss.dma);
-	_heap_end = ORIGIN(RAM) + LENGTH(RAM);
+	/* the heap stops below the diagnostics word: the malloc must never hand
+	 * out the word (or the framework's fault info above it) */
+	_heap_end = 0x2027FF40;
 
 	_itcm_block_count = (SIZEOF(.text.itcm) + SIZEOF(.ARM.exidx) + 0x7FFF) >> 15;
 	_flexram_bank_config = 0xAAAAAAAA | ((1 << (_itcm_block_count * 2)) - 1);

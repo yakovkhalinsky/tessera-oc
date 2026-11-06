@@ -38,10 +38,17 @@ static void check(const char *what, int ok)
 }
 
 /* the pins the module's own outputs own: the OLED's three (6, 7, 8), the
- * DAC's two (9, 10) and the SPI's (11, 12, 13 and 25, 26, 27) */
+ * DAC's two (9, 10), the SPI's three (11, 12, 13) and the SPI's chip select
+ * (37) - the same set the firmware has (oc_port.h's OC_OUTPUT_PIN_LIST) */
+static const uint8_t OUTPUT_PINS[] = OC_OUTPUT_PIN_LIST;
+
 static int is_module_pin(uint8_t pin)
 {
-    return !OC_PIN_MOVABLE(pin);
+    int i;
+    for (i = 0; i < (int)(sizeof OUTPUT_PINS / sizeof OUTPUT_PINS[0]); i++)
+        if (OUTPUT_PINS[i] == pin)
+            return 1;
+    return !OC_PIN_MOVABLE(pin);           /* and the pins the remap may not touch */
 }
 
 /* the default orientation (Phazerville PSv2.0.2 OC_gpio.cpp:128-136) */
@@ -83,7 +90,7 @@ static void check_remap(void)
         for (i = 0; i < 9; i++)
             if (is_module_pin(pins[i]))
                 bad++;
-        check("the remap touches no output pin (6-13, 25-27)", bad == 0);
+        check("the remap touches no output pin (6-13, 37)", bad == 0);
     }
     /* the same set of pins, the roles swapped: the top and the bottom button
      * trade places, and so do the two encoders and their buttons */

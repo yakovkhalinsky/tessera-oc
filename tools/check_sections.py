@@ -21,8 +21,10 @@ the firmware only fails on the module. So the build checks the map itself:
      v0.1.1 fault: the trap was misaligned, it covered the tail of the
      engine's .noinit, and the engine's pattern_init() memset into it;
   5. .bss must be NOBITS (it holds no initialised data, so it costs no flash);
-  6. the persistent diagnostics word (oc_persist) must be in .bss.dma (the
-     AXI RAM), not in the cleared .bss: it has to survive the reset;
+  6. the persistent diagnostics word (oc_persist) must be in its own section
+     at the end of the AXI RAM (.oc_persist, 0x2027FF40..0x2027FF80), not in
+     the cleared .bss and not at the start of the AXI RAM: it has to survive
+     the reset;
   7. the stack must have its headroom: _estack - _ebss of at least 64 KiB.
 
     tools/check_sections.py                        # the default ELF
@@ -69,12 +71,20 @@ RAM_RANGES = ((0x20000000, 0x20080000), (0x20200000, 0x20280000))
 #   .bss      the startup clears it (with the engine's .pool and .noinit in it)
 #   .pool     the engine's own: a map that still has it as a section of its
 #   .noinit   own is caught by the MPU's trap check below, not here
-#   .bss.dma  the framework's own (the USB's buffers, the diagnostics word and
-#             the heap's start)
-KNOWN_RAM_SECTIONS = (".data", ".bss", ".pool", ".noinit", ".bss.dma")
+#   .bss.dma  the framework's own (the USB's buffers and the heap's start)
+#   .oc_persist  the port's own: the diagnostics word, at a fixed address
+KNOWN_RAM_SECTIONS = (".data", ".bss", ".pool", ".noinit", ".bss.dma", ".oc_persist")
 
-# the RAM that the framework's own DMA area holds (not cleared, not copied)
-UNMANAGED = (".bss.dma",)
+# the RAM that the framework's own DMA area holds (not cleared, not copied),
+# and the port's own diagnostics word (a fixed address, written by the port)
+UNMANAGED = (".bss.dma", ".oc_persist")
+
+# the diagnostics word's own address: the end of the AXI RAM, just below the
+# framework's fault info (the startup writes it at 0x2027FF80,
+# cores/teensy4/startup.c:635). The start of the AXI RAM is wiped by the boot
+# ROM, so a word there does not survive the reset.
+PERSIST_LO = 0x2027FF40
+PERSIST_HI = 0x2027FF80
 
 # the map's own symbols: they are the addresses, not data in the RAM
 MAP_SYMBOLS = frozenset(("_sdata", "_edata", "_sbss", "_ebss", "_estack"))
@@ -210,16 +220,21 @@ def main():
     elif bss[0][3]:
         problems.append(".bss is loaded: it must be NOBITS, for it is cleared, not copied")
 
-    # 6. the diagnostics word: it has to survive the reset, so it must be in
-    #    the AXI RAM (.bss.dma), not in the cleared .bss
+    # 6. the diagnostics word: it has to survive the reset, so it must be at
+    #    the end of the AXI RAM (.oc_persist), not in the cleared .bss and not
+    #    at the start of the AXI RAM (which the boot ROM may wipe)
     persist = symbols.get("oc_persist")
     dma = [s for s in sections if s[0] == ".bss.dma"]
     if persist is None:
         problems.append("the ELF has no oc_persist (the persistent diagnostics word): the build is not the port's")
     elif sbss <= persist < ebss + 32:
         problems.append("oc_persist is at 0x%08x, in the cleared bss: the startup would wipe it at every reset" % persist)
-    elif not dma or not (dma[0][1] <= persist < dma[0][1] + dma[0][2]):
-        problems.append("oc_persist is at 0x%08x, not in .bss.dma (the AXI RAM): it must survive the reset" % persist)
+    elif not (PERSIST_LO <= persist < PERSIST_HI):
+        problems.append("oc_persist is at 0x%08x, not in 0x%08x..0x%08x (the end of the AXI RAM, below the "
+                        "framework's fault info): it must survive the reset" % (persist, PERSIST_LO, PERSIST_HI))
+    elif dma and dma[0][1] <= persist < dma[0][1] + dma[0][2]:
+        problems.append("oc_persist is at 0x%08x, in .bss.dma: the start of the AXI RAM does not survive the reset"
+                        % persist)
 
     # 7. the stack's headroom: the stack grows down from _estack
     headroom = estack - ebss

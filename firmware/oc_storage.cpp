@@ -113,10 +113,16 @@ bool oc_storage_ok(void) { return fs_ok; }
  * save. The error is the answer, and nothing is touched. */
 int oc_save(uint32_t slot) { (void)slot; return 1; }
 
-/* the slot's bytes into the project */
+/* The reads: fs.open(name), the default mode, and nothing else.
+ *
+ * The framework's FILE_READ is 0 and FILE_WRITE is 1 (cores/teensy4/FS.h:37-38),
+ * and littlefs's LFS_O_RDONLY is 1 (LittleFS/src/littlefs/lfs.h:127) - so
+ * open(name, LFS_O_RDONLY) opens for WRITE: it creates the file if it is not
+ * there and seeks to its end (LittleFS/src/LittleFS.h:278-296). The drive is
+ * read only, so the mode is the default one: FILE_READ. */
 int oc_load(uint32_t slot)
 {
-    File f = fs.open(slot_name(slot), LFS_O_RDONLY);
+    File f = fs.open(slot_name(slot));
     size_t len;
     int ok;
     if (!f)
@@ -134,7 +140,7 @@ static const char *LAST_NAME = "/last";
 
 int oc_last_slot(void)
 {
-    File f = fs.open(LAST_NAME, LFS_O_RDONLY);
+    File f = fs.open(LAST_NAME);
     uint8_t slot = 0;
     if (!f)
         return 0;
@@ -151,7 +157,7 @@ void oc_set_last_slot(uint32_t slot) { (void)slot; }
 /* is there anything in the slot? */
 int oc_slot_used(uint32_t slot)
 {
-    File f = fs.open(slot_name(slot), LFS_O_RDONLY);
+    File f = fs.open(slot_name(slot));
     if (!f)
         return 0;
     f.close();

@@ -38,6 +38,16 @@
 #include "oc_spi.h"
 #include "oc_version.h"
 
+/* The hardware variant: the o_C panel this port is built for. The VOR panel
+ * is not the same hardware (its pin 9 is a button, and the DAC's reset wants
+ * a pin this port does not have), and a build with no variant at all would
+ * take the pins below on faith. The variant is named in platformio.ini. */
+#if defined(OC_HW_UOC_VOR) || defined(OC_HW_VOR)
+#error "VOR panel unsupported on Teensy 4.0 (pin 9 is a button; DAC RST needs pin 9)"
+#elif !defined(OC_HW_UOC_A)
+#error "no hardware variant: set -DOC_HW_UOC_A in platformio.ini"
+#endif
+
 /* --------------------------------------------------------- the o_C's pins --- */
 /* The DAC and the OLED's own pins: the only outputs the module has. */
 #define PIN_DAC_CS 10          /* the DAC8565's chip select (SPI0's) */
@@ -51,7 +61,23 @@
 /* The module's input pins: the trigger inputs, the buttons and the encoders.
  * The set is the same either way round (only the roles change with the flip),
  * and the tables that say the roles are in oc_port.h. */
-static const uint8_t OC_INPUT_PINS[] = {0, 1, 2, 3, 4, 5, 14, 15, 16, 21, 22, 23};
+static constexpr uint8_t OC_INPUT_PINS[] = {0, 1, 2, 3, 4, 5, 14, 15, 16, 21, 22, 23};
+
+/* The module's output pins: the OLED's three (6, 7, 8), the DAC's two (9, 10),
+ * the SPI's three (11, 12, 13) and the SPI's chip select (37). */
+static constexpr uint8_t OC_OUTPUT_PINS[] = OC_OUTPUT_PIN_LIST;
+
+/* The pin check: the module's inputs and its outputs must not meet. A control
+ * on a pin the module drives is a control that does not work. */
+static constexpr bool oc_pin_sets_disjoint(void)
+{
+    for (uint8_t a : OC_INPUT_PINS)
+        for (uint8_t b : OC_OUTPUT_PINS)
+            if (a == b)
+                return false;
+    return true;
+}
+static_assert(oc_pin_sets_disjoint(), "an input pin is an output pin");
 
 struct oc_pinout oc_pins = OC_PINOUT_PLAIN;
 
@@ -496,12 +522,18 @@ void setup(void)
     for (uint32_t i = 0; i < sizeof OC_INPUT_PINS / sizeof OC_INPUT_PINS[0]; i++) pinMode(OC_INPUT_PINS[i], INPUT_PULLUP);
     oc_stage(11);
 
-    /* The safe mode: the bottom button held at power-on. Either of the two
-     * buttons that can be the bottom one (pins 4 and 5) counts, so the
-     * module's orientation does not matter. */
-    for (int i = 0; i < 3; i++) {           /* three samples over 30 ms */
-        if (!digitalRead(4) || !digitalRead(5)) oc_safe_mode = true;
-        delay(10);
+    /* Safe mode: bottom button held at power-on. Cap on the line needs
+     * settle time; require ALL samples LOW on the same pin (AND), not any. */
+    delay(25);                              /* ≥25 ms settle after INPUT_PULLUP */
+    {
+        const uint8_t candidates[2] = {4, 5}; /* but_bot either orientation; cal not read yet */
+        bool held[2] = {true, true};
+        for (int s = 0; s < 3; s++) {       /* ≥3 samples, 10 ms apart */
+            for (int c = 0; c < 2; c++)
+                if (digitalRead(candidates[c])) held[c] = false; /* HIGH → not held */
+            if (s + 1 < 3) delay(10);
+        }
+        oc_safe_mode = held[0] || held[1];  /* a pin LOW on every sample */
     }
 
     /* The DAC and the OLED share the SPI bus and must never see each other's

@@ -137,6 +137,13 @@ struct oc_pinout {
 static const struct oc_pinout OC_PINOUT_PLAIN = {5, 4, 23, 14, 22, 21, 16, 15, 0};
 static const struct oc_pinout OC_PINOUT_FLIP = {4, 5, 14, 23, 15, 16, 21, 22, 3};
 #define OC_PIN_MOVABLE(p) ((p) < 6u || ((p) > 13u && (p) < 25u) || (p) > 27u)
+
+/* The module's output pins: the OLED's three (6, 7, 8), the DAC's two (9, 10),
+ * the SPI's three (11, 12, 13) and the SPI's chip select (37). The remap may
+ * not touch them, and the firmware drives nothing else. The firmware and the
+ * host test have the same set, and the two must not meet. */
+#define OC_OUTPUT_PIN_LIST {6, 7, 8, 9, 10, 11, 12, 13, 37}
+
 extern struct oc_pinout oc_pins;
 
 /* The calibration's flags, as the module's own page has them: the display's
