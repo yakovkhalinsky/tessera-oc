@@ -8,7 +8,7 @@ cords that move anything from anything. It is an *instrument*: it makes the soun
 
 An o_C module — the Ornament & Crime badge and its Eurorack relatives, the ones that
 drive a modular rig — is not an instrument. It has four CV outputs, four trigger
-outputs, MIDI, a display and two encoders, and **no audio output at all**. It is a
+*inputs*, MIDI, a display and two encoders, and **no audio output at all**. It is a
 sequencer for the rig, not a voice in it.
 
 So Tessera-OC is Tessera's *generative half* on that hardware: the generators, the
@@ -31,7 +31,7 @@ are credited here and in [NOTICE](NOTICE); nothing here is my own invention.
 | **[Tessera](https://github.com/Rastapopolix/tessera)** — the generative engine: the generators, EVOLVE and FORM, the harmony, the cords, the steps. **Copyright (C) 2026 Theo Dainis** ([Rastapopolix](https://github.com/Rastapopolix)), GPL-3.0-only. Vendored as a submodule (`vendor/tessera`), pinned to a branch that splits the engine from the audio path. |
 | **[Melodee](https://github.com/keremimo/melodee)** — the FM-1 firmware Tessera grew out of: the sequencer, the parameter registry, the modulation matrix, the project format. **Copyright (C) 2026 Kerem Kilic (Ellic Studio)**, GPL-3.0-only. |
 | **[Felucca](https://github.com/…)** — the upstream of Melodee. **Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments**, GPL-3.0-only. |
-| **[Ornament & Crime](https://ornament-and-cri.me/)** — the hardware: the original o_C design by **mxmxmx** (CC BY-NC-SA 4.0) and the O.R.N.8 by **Paul Stoffregen**. The CV, the trigger outs, the OLED, the encoders and the DACs are theirs. |
+| **[Ornament & Crime](https://ornament-and-cri.me/)** — the hardware: the original o_C design by **mxmxmx** (CC BY-NC-SA 4.0) and the O.R.N.8 by **Paul Stoffregen**. The CV, the trigger ins, the OLED, the encoders and the DACs are theirs. |
 | **[O_C-Phazerville](https://github.com/djphazer/O_C-Phazerville)** (DJ Phazer) — the o_C module firmware this port takes the platform conventions from, and the reference for the T4.0's pinout, the clock and the UI idiom. MIT, with GPLv3 parts. |
 | **Mutable Instruments** — the Plaits synthesis Tessera's MACRO engine came from, and **DaisySP** — the physical models. MIT / Apache-2.0. |
 | **[Chakra Petch](https://fonts.google.com/specimen/Chakra+Petch)** — the type. OFL. |
@@ -57,19 +57,25 @@ the shared generator test runs against the FM-1's own baseline, **342 checks, no
 failing**. The two checks it skips are the ones that read the synth's voices (the pitch
 accumulator, ENERGY's drone): they need a synth, and the port has none.
 
+The current release is **v0.1.1** ([CHANGELOG.md](CHANGELOG.md)): the v0.1.0
+firmware bootlooped on the module (the engine's `.pool` was an orphan section
+that nothing ever wrote), and this one fixes that and the other faults the port
+had. **v0.1.1 is untested on hardware until Yakov confirms it.**
+
 ---
 
 ## The outputs
 
-The module has four CV outs (a DAC8565, then an OPA2172 buffer) and four digital
-outs. There is no MIDI out: the module is a sequencer for the rig, and the rig
-reads CV and gates.
+The module has four CV outs (a DAC8565, then an OPA2172 buffer) and **no digital
+outs**: its four trigger jacks (TR1..TR4) are inputs, as the schematic and the
+o_C's own firmware have them. There is no MIDI out either: the module is a
+sequencer for the rig, and the rig reads CV.
 
 | | |
 |---|---|
-| **CV 1..4** | the tracks' pitches, **1 V an octave** — the o_C's own convention, so the port's CV outs are interchangeable with the module's: 0 V is MIDI 36 (C2, the T4.0's `kOctaveZero = 3`), an octave up is a volt more. The range is the module's own asymmetric Vbias, −3 V … +7 V. |
-| **DIGITAL 1..4** | each track's **gate** (up for the note, down at its end), **trigger** (a 5 ms pulse at the onset) or **clock** (the tempo, for a rig the module is the master of). A gate is the default: a gate is what a voice wants, a trigger is what a drum voice wants. |
-| **DIGITAL in** | an external clock, so the rig is usually the master and the module follows it. |
+| **CV 1..4** | the tracks' pitches, **1 V an octave** — the o_C's own convention, so the port's CV outs are interchangeable with the module's: 0 V is MIDI 36 (C2, the T4.0's `kOctaveZero = 3`), an octave up is a volt more. The range is the module's own asymmetric Vbias, −3 V … +7 V, and the codes come from the module's own calibration (its EEPROM, per channel, per octave). |
+| **the gate on the CV** | the module has no digital outs, so the gate rides on the same CV: a track's CV carries its pitch while the track's out is asserted (the **gate** up for the note, a 5 ms **trigger** pulse at its onset, the **clock**'s pulse) and rests at the module's 0 V reference otherwise. The rig reads the gate off the CV — a comparator, an envelope follower — and the pitch off the same wire. |
+| **TR1..TR4** | the trigger *inputs*, read and never driven: TR1 takes the rig's clock (a trigger pulls the pin down, so the pulse is the falling edge), TR2..TR4 are read but unused. |
 
 Four tracks, four channels, one to one: Tessera is a four-track instrument and the
 o_C is a four-channel one, so every track keeps its own key, scale, transpose and
@@ -81,8 +87,8 @@ Two things the module cannot say, and what happens instead:
 - **Velocity has nowhere to go** — no CV spare, no MIDI. An accent is heard in the
   timing, not the level; the gate's *length* is the sequencer's own gate (the
   step's GATE, the LENGTH page) and the cords can move it.
-- **The digital outs are 3.3 V logic**, where a Eurorack gate is +5 V. Most gate
-  inputs take 3.3 V; the rest want a level shifter.
+- **There is no gate jack**, only the CV. The gate is the CV's own shape: it is at
+  the note's pitch while the note sounds, and back at 0 V when it ends.
 
 The pitch scale's other setting is 0.1 V an octave, for V/oct systems.
 
@@ -99,10 +105,21 @@ firmware/            the port: the o_C engine
   oc_midi.c            the MIDI queue (the module's USB MIDI)
   oc_state.c           the input, the pitch bend, the inert FM-1 engine state
   oc_hal.h             the platform names the shared engine calls
+  oc_platform.cpp      the module: the pins, the CV out, the calibration, the tick
+  oc_display.cpp       the OLED (the SH1106, over the DAC's SPI bus)
+  oc_ui.cpp            the screen and the controls
+  oc_storage.cpp       the module's own flash (the projects, four slots)
+  oc_port.h            the engine's and the platform's interface
+  oc_spi.h             the SPI bus the DAC and the OLED share
+  oc_version.h         the release the firmware carries
+  oc_imxrt1062.ld      the port's memory map (the engine's .pool and .noinit in .bss)
 tests/               the port's tests
   oc_engine_test.c     the FM-1's generator test with the engine swapped for the port's
   oc_hostsim.c         the host environment (the port's engine, the block driver, the sinks)
 tools/               the build scripts
+  build_host.sh        the host build and the generator test
+  check_sections.py    the memory map's check (no orphan RAM, nothing unwritten)
+  release.sh           the firmware, the hex and the release notes
 vendor/tessera/      the engine, as a submodule (a fork of Rastapopolix/tessera)
 ```
 
@@ -131,7 +148,19 @@ tools/build_host.sh          # build and run
 tools/build_host.sh build    # build only
 ```
 
-The device build (Phase 5) will be a PlatformIO project for the Teensy 4.0.
+The device build (Phase 5) is a PlatformIO project for the Teensy 4.0:
+
+```sh
+pio run -e T40                        # build
+pio run -e T40 -t upload              # flash it (the module must be in normal mode)
+python3 tools/check_sections.py       # the memory map: no orphan RAM, nothing unwritten
+```
+
+The last one is the check that would have caught the v0.1.0 bootloop: the engine's
+`.pool` was an orphan section (the Teensy's linker script knows nothing of it), so
+nothing ever wrote it, and the engine ran on garbage. The port's own linker script
+(`firmware/oc_imxrt1062.ld`) puts it in the range the startup clears, and the check
+makes sure it stays there.
 
 ---
 

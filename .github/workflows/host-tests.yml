@@ -6,7 +6,9 @@ name: host tests and device build
 # port's engine in place of the FM-1's.
 #
 # The device build compiles the same engine for the Teensy 4.0, so a change that
-# only breaks on the target (a type, a section, a size) is caught here.
+# only breaks on the target (a type, a section, a size) is caught here. The
+# memory map is checked too: the v0.1.0 firmware bootlooped on the module
+# because the engine's .pool was an orphan section, which no build noticed.
 
 on:
   push:
@@ -34,3 +36,8 @@ jobs:
         run: pio run -e T40
       - name: the sizes
         run: pio run -e T40 -t size
+      # The memory map: no orphan RAM and nothing outside the startup's reach.
+      # The v0.1.0 firmware bootlooped on the module because the engine's .pool
+      # was an orphan (nothing ever wrote it), and nothing in the build noticed.
+      - name: the memory map
+        run: python3 tools/check_sections.py .pio/build/T40/firmware.elf
