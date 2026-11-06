@@ -1,16 +1,19 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Theo Dainis (melodee-tess) */
-/* The o_C port's MIDI layer.
+/* The o_C port's MIDI layer: there is none.
  *
- * The queue is the FM-1's own shape (usb.c): four-byte packets, the source's
- * clock count kept with every packet so that a MIDI clock's tempo survives a
- * note burst that overflowed the queue, and an overflow flag that makes the
- * sequencer release the notes rather than leave them hanging.
+ * The port has no MIDI out: the module is a sequencer for the rig, and the rig
+ * reads CV and gates. The engine's MIDI out path (midi_out.c, in seq.c) is
+ * still compiled - it is the engine's own - but it goes nowhere: midi_out_event
+ * below throws the packets away.
  *
- * The module's MIDI out is USB (the o_C's DIN jacks are the T4.1's; the T4.0's
- * are free pins, so a DIN out is a wire away - Phase 2). The port's clock is
- * the sample at FS (oc_ticks), the same unit the sequencer counts in, so the
- * MIDI timing is the FM-1's. */
+ * The MIDI *in* queue stays, because the engine's MIDI in is the engine's: a
+ * controller can drive the port's parameters over the module's USB MIDI
+ * without a change here (Phase 2 wires the module's USB MIDI to it). It is the
+ * FM-1's own shape (usb.c): four-byte packets, the source's clock count kept
+ * with every packet so that a MIDI clock's tempo survives a note burst that
+ * overflowed the queue, and an overflow flag that makes the sequencer release
+ * the notes rather than leave them hanging. */
 #define MQ 64u
 static uint32_t midi_in_q[MQ], midi_out_q[MQ];
 static uint32_t midi_in_ms[MQ];
@@ -48,12 +51,8 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     return 1;
 }
 
-/* a MIDI packet out: the queue the platform drains */
+/* a MIDI packet out: the port has no MIDI out, so the packet goes nowhere */
 static void midi_out_event(uint32_t pkt)
 {
-    if (mo_w - mo_r < MQ) {
-        midi_out_q[mo_w % MQ] = pkt;
-        RING_PUBLISH();
-        mo_w++;
-    }
+    (void)pkt;
 }

@@ -59,6 +59,35 @@ accumulator, ENERGY's drone): they need a synth, and the port has none.
 
 ---
 
+## The outputs
+
+The module has four CV outs (a DAC8565, then an OPA2172 buffer) and four digital
+outs. There is no MIDI out: the module is a sequencer for the rig, and the rig
+reads CV and gates.
+
+| | |
+|---|---|
+| **CV 1..4** | the tracks' pitches, **1 V an octave** — the o_C's own convention, so the port's CV outs are interchangeable with the module's: 0 V is MIDI 36 (C2, the T4.0's `kOctaveZero = 3`), an octave up is a volt more. The range is the module's own asymmetric Vbias, −3 V … +7 V. |
+| **DIGITAL 1..4** | each track's **gate** (up for the note, down at its end), **trigger** (a 5 ms pulse at the onset) or **clock** (the tempo, for a rig the module is the master of). A gate is the default: a gate is what a voice wants, a trigger is what a drum voice wants. |
+| **DIGITAL in** | an external clock, so the rig is usually the master and the module follows it. |
+
+Four tracks, four channels, one to one: Tessera is a four-track instrument and the
+o_C is a four-channel one, so every track keeps its own key, scale, transpose and
+cords, and the harmony (the chord track, QNT CHRD) lands on the outputs as it
+should.
+
+Two things the module cannot say, and what happens instead:
+
+- **Velocity has nowhere to go** — no CV spare, no MIDI. An accent is heard in the
+  timing, not the level; the gate's *length* is the sequencer's own gate (the
+  step's GATE, the LENGTH page) and the cords can move it.
+- **The digital outs are 3.3 V logic**, where a Eurorack gate is +5 V. Most gate
+  inputs take 3.3 V; the rest want a level shifter.
+
+The pitch scale's other setting is 0.1 V an octave, for V/oct systems.
+
+---
+
 ## Layout
 
 ```

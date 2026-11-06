@@ -135,17 +135,26 @@ track 1..4  →  MIDI ch 1..4
 generators  →  MIDI ch 5..   (their own channel each, as today)
 ```
 
-### 5.2 Open questions (to settle with the user)
+### 5.2 Settled
 
-* **Q1 — voices vs. tracks.** A modular wants more than four voices, but there are only four CV
-  outputs. Options: (a) 4 tracks → 4 CVs, polyphony only over MIDI; (b) a "voice pool" mode where
-  the 4 CVs are the *loudest* voices and MIDI carries all of them; (c) CVs carry *roles* (pitch,
-  gate, accent, mod) instead of tracks.
-* **Q2 — gate levels.** The TR outputs are 3.3 V logic, not ±5 V gates. Options: use them anyway
-  (most Eurorack gate inputs are 3.5 V-threshold), or drive gates from the CV outputs (0–10 V),
-  which costs a CV channel.
-* **Q3 — pitch scaling.** 1 V/oct (Eurorack default) vs 0.1 V/oct (V/oct systems) vs fixed
-  semitone steps. Make it a setting.
+* **Q1 — voices vs. tracks: one to one.** Track 1..4 → CV 1..4 and DIGITAL 1..4. Tessera is a
+  four-track instrument and the o_C a four-channel one; every track keeps its own key, scale,
+  transpose and cords, and the harmony lands on the outputs as it should. The CVs do not carry
+  "roles" instead of tracks.
+* **Q2 — gates: on the digital outs, 3.3 V logic.** Most Eurorack gate inputs take 3.3 V; the rest
+  want a level shifter. A CV out is worth more as a pitch than as a 10 V gate. Each digital out is
+  a **gate** (default), a **trigger** (a 5 ms pulse at the onset) or a **clock** (the tempo, for a
+  rig the module is the master of). The usual way round is the other one: the rig's clock comes in
+  on a digital input and the module follows it.
+* **Q3 — pitch scaling: 1 V an octave**, and the o_C's own convention, so the port's CV outs are
+  interchangeable with the module's: **0 V = MIDI 36 (C2)** (the T4.0's `kOctaveZero = 3`), an
+  octave up a volt more, the range the module's asymmetric Vbias gives (−3 V … +7 V, MIDI 0…120).
+  0.1 V an octave stays as the other setting.
+* **Q4 — no MIDI.** The port has no MIDI out: the module is a sequencer for the rig, and the rig
+  reads CV and gates. The engine's MIDI in stays (the engine's own), so a controller can drive the
+  parameters later without a change here. The cost: **velocity has nowhere to go** — an accent is
+  heard in the timing, not the level, and the gate's *length* is the sequencer's own gate, which
+  the cords can move.
 
 ### 5.3 Re-pointing the modulation matrix
 
