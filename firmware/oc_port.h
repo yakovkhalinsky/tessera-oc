@@ -13,6 +13,7 @@
 #define OC_PORT_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "param_desc.h"     /* the engine's parameter descriptor (core.h has it too) */
 
@@ -86,6 +87,17 @@ const uint8_t *oc_scl_rows(uint8_t *count);
 
 /* the track's generator */
 void oc_set_generator(uint32_t tr, int32_t mode);
+
+/* the project: the state, packed and unpacked (the engine's), and the slots
+ * it is kept in (the platform's storage) */
+uint32_t oc_project_pack(uint8_t *out, uint32_t max);
+int oc_project_unpack(const uint8_t *in, uint32_t len);
+int oc_save(uint32_t slot);
+int oc_load(uint32_t slot);
+int oc_slot_used(uint32_t slot);
+int oc_last_slot(void);
+void oc_set_last_slot(uint32_t slot);
+bool oc_storage_init(void);
 
 /* --- the platform's side --- */
 

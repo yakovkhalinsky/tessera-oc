@@ -221,6 +221,7 @@ void ui_init(void);
 void ui_input(void);
 void ui_draw(void);
 void ui_page_next(int32_t dir);
+void ui_button(int32_t which);
 
 void setup(void)
 {
@@ -254,7 +255,9 @@ void setup(void)
 
     oc_cal_load();
     oc_engine_init();
-    oc_power_on();
+    oc_storage_init();
+    if (!oc_load((uint32_t)oc_last_slot()))
+        oc_power_on();                    /* nothing saved: the module composes */
     oc_display_init();
     ui_init();
 

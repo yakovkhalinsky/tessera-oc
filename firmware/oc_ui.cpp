@@ -51,10 +51,13 @@ void oc_track_param_set(uint32_t tr, uint32_t id, int32_t v);
 const uint8_t *oc_gen_rows(uint32_t gen, uint8_t *count);
 const uint8_t *oc_scl_rows(uint8_t *count);
 void oc_set_generator(uint32_t tr, int32_t mode);
+int oc_save(uint32_t slot);
+int oc_load(uint32_t slot);
+int oc_slot_used(uint32_t slot);
 
 /* --- the pages --- */
 /* A row is a parameter of the selected track, or one of the port's own. */
-enum { ROW_TX, ROW_P, ROW_TEMPO, ROW_TRACK, ROW_CLOCK };
+enum { ROW_TX, ROW_P, ROW_TEMPO, ROW_TRACK, ROW_CLOCK, ROW_SLOT };
 struct UiRow {
     uint8_t kind;
     uint8_t id;      /* the parameter's id */
@@ -69,6 +72,11 @@ static const UiRow PAGE_HOME[] = {
     {ROW_CLOCK, 0, 0},
 };
 
+/* PROJ: the four slots the project is kept in */
+static const UiRow PAGE_PROJ[] = {
+    {ROW_SLOT, 0, 0}, {ROW_SLOT, 0, 1}, {ROW_SLOT, 0, 2}, {ROW_SLOT, 0, 3},
+};
+
 struct UiPage {
     const char *name;
     const UiRow *rows;
@@ -80,6 +88,7 @@ static const UiPage PAGES[] = {
     {"HOME", PAGE_HOME, sizeof PAGE_HOME / sizeof PAGE_HOME[0], 0},
     {"GEN", 0, 0, 1},
     {"SCL", 0, 0, 2},
+    {"PROJ", PAGE_PROJ, sizeof PAGE_PROJ / sizeof PAGE_PROJ[0], 0},
 };
 
 #define PAGE_COUNT (sizeof PAGES / sizeof PAGES[0])
@@ -195,6 +204,10 @@ static void ui_row_text(const UiRow *row, char *label, char *value)
         copy(label, "CLOCK", 12);
         copy(value, oc_clock_following() ? "EXT" : "INT", 8);
         return;
+    case ROW_SLOT:
+        snprintf(label, 12, "SLOT %u", (unsigned)(row->arg + 1u));
+        copy(value, oc_slot_used(row->arg) ? "USED" : "-", 8);
+        return;
     case ROW_TX:
         d = oc_tx_desc(row->id);
         v = oc_tx_get(tr, row->id);
@@ -288,6 +301,22 @@ void ui_input(void)
     steps = encoder_step(&enc_right);
     while (steps-- && n)
         ui_row_turn(&ui_rows[ui_row], steps > 0 ? 1 : -1);
+}
+
+/* the buttons: the left encoder's and the right one's. On the project page they
+ * load and save the chosen slot; elsewhere the left one starts and stops. */
+void ui_button(int32_t which)
+{
+    if (PAGES[ui_page].rows == PAGE_PROJ) {
+        uint32_t slot = ui_rows[ui_row].arg;
+        if (which)
+            oc_save(slot);                  /* the right one: save */
+        else
+            oc_load(slot);                  /* the left one: load */
+        return;
+    }
+    if (!which)
+        oc_transport(oc_playing() ? 2u : 1u);
 }
 
 void ui_page_next(int32_t dir)
