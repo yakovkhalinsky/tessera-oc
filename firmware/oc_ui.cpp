@@ -43,6 +43,7 @@ void oc_set_tempo(int16_t bpm);
 uint8_t oc_clock_following(void);
 const param_desc_t *oc_tx_desc(uint32_t tx);
 const param_desc_t *oc_track_desc(uint32_t id);
+const param_desc_t *oc_engine_desc(uint32_t id);
 void oc_param_format(const param_desc_t *d, int32_t v, char *val, const char **unit);
 int32_t oc_tx_get(uint32_t tr, uint32_t tx);
 void oc_tx_set(uint32_t tr, uint32_t tx, int32_t v);
@@ -57,7 +58,7 @@ int oc_slot_used(uint32_t slot);
 
 /* --- the pages --- */
 /* A row is a parameter of the selected track, or one of the port's own. */
-enum { ROW_TX, ROW_P, ROW_TEMPO, ROW_TRACK, ROW_CLOCK, ROW_SLOT };
+enum { ROW_TX, ROW_P, ROW_E, ROW_TEMPO, ROW_TRACK, ROW_CLOCK, ROW_SLOT };
 struct UiRow {
     uint8_t kind;
     uint8_t id;      /* the parameter's id */
@@ -88,6 +89,7 @@ static const UiPage PAGES[] = {
     {"HOME", PAGE_HOME, sizeof PAGE_HOME / sizeof PAGE_HOME[0], 0},
     {"GEN", 0, 0, 1},
     {"SCL", 0, 0, 2},
+    {"CV", 0, 0, 3},
     {"PROJ", PAGE_PROJ, sizeof PAGE_PROJ / sizeof PAGE_PROJ[0], 0},
 };
 
@@ -115,10 +117,18 @@ static uint32_t ui_build_rows(void)
                 ui_rows[n].arg = 0;
                 n++;
             }
-        } else {
+        } else if (p->gen_page == 2u) {
             ids = oc_scl_rows(&count);
             for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
                 ui_rows[n].kind = ROW_P;
+                ui_rows[n].id = ids[i];
+                ui_rows[n].arg = 0;
+                n++;
+            }
+        } else {
+            ids = oc_cv_rows(&count);
+            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+                ui_rows[n].kind = ROW_E;
                 ui_rows[n].id = ids[i];
                 ui_rows[n].arg = 0;
                 n++;
@@ -220,6 +230,12 @@ static void ui_row_text(const UiRow *row, char *label, char *value)
         copy(label, d ? d->label : "?", 12);
         oc_param_format(d, v, value, &unit);
         return;
+    case ROW_E:
+        d = oc_engine_desc(row->id);
+        v = oc_track_param_get(tr, row->id);
+        copy(label, d ? d->label : "?", 12);
+        oc_param_format(d, v, value, &unit);
+        return;
     }
 }
 
@@ -245,7 +261,8 @@ static void ui_row_turn(const UiRow *row, int32_t steps)
         oc_tx_set(tr, row->id, v + steps);
         return;
     case ROW_P:
-        d = oc_track_desc(row->id);
+    case ROW_E:
+        d = row->kind == ROW_E ? oc_engine_desc(row->id) : oc_track_desc(row->id);
         v = oc_track_param_get(tr, row->id);
         oc_track_param_set(tr, row->id, v + steps);
         return;

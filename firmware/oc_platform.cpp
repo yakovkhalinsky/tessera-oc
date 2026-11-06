@@ -90,9 +90,9 @@ static void oc_cal_load(void)
  * is asymmetric, so the output spans -3 V to +7 V, MIDI note 0 to 120. */
 #define OC_CV_MIN_MV (-3000)
 #define OC_CV_MAX_MV (7000)
-static uint32_t oc_note_to_code_linear(uint32_t note)
+static uint32_t oc_note_to_code_linear(uint32_t note, int32_t mv_per_semitone)
 {
-    int32_t mv = ((int32_t)note - 36) * 1000 / 12 + OC_CV_MIN_MV;
+    int32_t mv = ((int32_t)note - 36) * mv_per_semitone + OC_CV_MIN_MV;
     if (mv < 0) mv = 0;
     if (mv > OC_CV_MAX_MV - OC_CV_MIN_MV) mv = OC_CV_MAX_MV - OC_CV_MIN_MV;
     return (uint32_t)((uint64_t)mv * 65535u / (uint64_t)(OC_CV_MAX_MV - OC_CV_MIN_MV));
@@ -100,13 +100,15 @@ static uint32_t oc_note_to_code_linear(uint32_t note)
 
 /* a note as the DAC's code: the o_C's own mapping (its kOctaveZero, its
  * calibration table, the linear interpolation inside an octave) */
-static uint32_t oc_note_to_code(uint32_t note)
+static uint32_t oc_note_to_code(uint32_t ch, uint32_t note)
 {
     int32_t pitch = (int32_t)note * OC_SEMITONE_UNITS;
     int32_t octave, fractional;
     uint16_t lo, hi;
+    if (oc_cv_scale(ch))
+        return oc_note_to_code_linear(note, 100);   /* 0.1 V an octave (V/oct systems) */
     if (!oc_cal_valid)
-        return oc_note_to_code_linear(note);
+        return oc_note_to_code_linear(note, 1000);  /* 1 V an octave, straight */
     pitch += OC_OCTAVE_ZERO * OC_OCTAVE_UNITS;
     if (pitch < 0) pitch = 0;
     if (pitch > DAC_OCTAVES * OC_OCTAVE_UNITS) pitch = DAC_OCTAVES * OC_OCTAVE_UNITS;
@@ -123,7 +125,7 @@ void oc_cv_write(uint32_t ch, uint32_t note)
     uint32_t code;
     if (ch > 3u)
         return;
-    code = oc_note_to_code(note);
+    code = oc_note_to_code(ch, note);
     code = DAC_MAX - code;                    /* the DAC's output is inverted */
     digitalWrite(PIN_DAC_CS, LOW);
     SPI.transfer16(DAC_CMD(ch));               /* the command */
@@ -142,6 +144,36 @@ void oc_gate_write(uint32_t ch, uint32_t on)
 
 /* ------------------------------------------------------------- the module --- */
 static IntervalTimer oc_timer;
+
+/* The clock out: a track whose digital out is set to CLOCK carries the tempo
+ * (24 pulses a beat, as MIDI clock does), so the rig can follow the module
+ * instead of the other way round. */
+static uint32_t oc_clock_phase;                /* the samples since the last pulse */
+static uint32_t oc_clock_pulse_ticks;         /* the ticks the pulse is high for */
+
+static void oc_clock_out(uint32_t samples)
+{
+    int32_t bpm = oc_tempo();
+    uint32_t period = bpm > 0 ? (uint32_t)(((uint64_t)oc_sample_rate() * 60u * 1000u) / ((uint32_t)bpm * 24u)) : 0;
+    uint32_t i;
+    if (!period)
+        return;
+    oc_clock_phase += samples;
+    if (oc_clock_phase >= period) {
+        oc_clock_phase -= period;
+        oc_clock_pulse_ticks = 17;                     /* about a millisecond, at the 60 us tick */
+        for (i = 0; i < 4u; i++)
+            if (oc_out_mode(i) == 2u)            /* CLOCK */
+                oc_gate_write(i, 1);
+    }
+    if (oc_clock_pulse_ticks) {
+        oc_clock_pulse_ticks--;
+        if (!oc_clock_pulse)
+            for (i = 0; i < 4u; i++)
+                if (oc_out_mode(i) == 2u)
+                    oc_gate_write(i, 0);
+    }
+}
 
 /* The external clock: the rig's clock comes in on the first digital input, as
  * a pulse train (a patch's clock is not MIDI). The port watches for the pulses
@@ -192,6 +224,7 @@ static void oc_tick(void)
     oc_clock_watch();
     oc_clock_advance(n);
     oc_out_tick();
+    oc_clock_out(n);
 }
 
 /* The buttons: the top one starts and stops the transport, the bottom one

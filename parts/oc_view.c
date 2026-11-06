@@ -52,6 +52,13 @@ const param_desc_t *oc_track_desc(uint32_t id)
     return id < P_COUNT ? &TP[id] : 0;
 }
 
+const param_desc_t *oc_engine_desc(uint32_t id)
+{
+    if (id >= P_E0 && id <= P_E7)
+        return &ENG_CV.edit[id - P_E0];
+    return id < P_COUNT ? &TP[id] : 0;
+}
+
 const char *oc_param_name(uint32_t pid)
 {
     const pid_entry_t *e = pid_find(pid);
@@ -120,6 +127,21 @@ const uint8_t *oc_gen_rows(uint32_t gen, uint8_t *count)
         gen = 0;
     *count = ROWS[gen].count;
     return ROWS[gen].ids;
+}
+
+/* the CV out's scale: 0 = 1 V an octave (Eurorack), 1 = 0.1 V */
+uint32_t oc_cv_scale(uint32_t part)
+{
+    return part < NTRK ? (uint32_t)trk[part].p[P_E3] : 0u;
+}
+
+/* the CV output's own parameters: the port's engine's edit parameters (the
+ * octave, the level, the gate, the scale and what the digital out carries) */
+static const uint8_t CV_ROWS[] = {P_E0, P_E1, P_E2, P_E3, P_E4};
+const uint8_t *oc_cv_rows(uint8_t *count)
+{
+    *count = NELEM(CV_ROWS);
+    return CV_ROWS;
 }
 
 /* the track's key, scale, transpose, quantize and its octave on the CV */

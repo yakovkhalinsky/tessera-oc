@@ -14,6 +14,7 @@
  * protocol, append only), so a project saved on an FM-1 keeps its sounds'
  * indices; here they all name the port's engine. */
 #define OC_EDIT(label, fmt, mn, mx, df) {label, fmt, mn, mx, df, 0, 0}
+#define OC_EDIT_NAMES(label, n, df) {label, F_ENUM, 0, (int16_t)(sizeof(n) / sizeof(n[0]) - 1), df, n, 0}
 #define OC_EDIT_NONE {"-", F_INT, 0, 0, 0, 0, 0}
 
 static void oc_engine_note_on(struct track *t, voice_t *v) { (void)t; (void)v; }
@@ -21,6 +22,9 @@ static void oc_engine_render(struct track *t, voice_t *v, int32_t *out, uint32_t
 {
     (void)t; (void)v; (void)out; (void)n; (void)m;
 }
+
+/* what the digital out carries */
+static const char *const OC_OUT_NAMES[] = {"GATE", "TRIG", "CLOCK"};
 
 /* the port's engine: the CV and MIDI the track sends to the rig */
 static const engine_t ENG_CV = {
@@ -31,7 +35,8 @@ static const engine_t ENG_CV = {
         OC_EDIT("LEVEL", F_INT, 0, 127, 100),    /* P_E1: how hard the CV out drives */
         OC_EDIT("GATE", F_INT, 0, 127, 64),      /* P_E2: the gate's length, as a share of the step */
         OC_EDIT("V/OCT", F_INT, 0, 1, 0),        /* P_E3: 0 = 1 V an octave (Eurorack), 1 = 0.1 V */
-        OC_EDIT_NONE, OC_EDIT_NONE, OC_EDIT_NONE, OC_EDIT_NONE,
+        OC_EDIT_NAMES("OUT", OC_OUT_NAMES, 0),    /* P_E4: what the digital out carries: gate, trigger, clock */
+        OC_EDIT_NONE, OC_EDIT_NONE, OC_EDIT_NONE,
     },
     .npresets = 0,
     .knob = {P_LEVEL, P_TRANS, P_LRATE, P_LD_PIT},  /* HOME: level, transpose, the LFO's rate and depth */

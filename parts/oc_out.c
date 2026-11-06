@@ -49,8 +49,14 @@
 #define OC_TRIG_TICKS (FS * OC_TRIG_MS / 1000u)
 /* what a track's digital out carries */
 enum { OC_OUT_GATE, OC_OUT_TRIG, OC_OUT_CLOCK };
-static uint8_t oc_out_mode[NTRK];          /* the track's own setting */
 static uint32_t oc_trig_until[NTRK];       /* the tick its trigger pulse ends at */
+
+/* the mode is the track's own parameter (the port's engine's P_E4), so the
+ * cords can move it like any other */
+uint32_t oc_out_mode(uint32_t part)
+{
+    return part < NTRK ? (uint32_t)trk[part].p[P_E4] : 0u;
+}
 
 /* the project's octave offset: every track's CV with it */
 static int32_t oc_cv_octave;
@@ -76,10 +82,10 @@ static void oc_note_on(uint32_t part, uint32_t note, uint32_t vel)
     if (part >= NPART)
         return;
     oc_cv_write(part, oc_cv_note(part, note));
-    if (oc_out_mode[part] == OC_OUT_TRIG) {
+    if (oc_out_mode(part) == OC_OUT_TRIG) {
         oc_trig_until[part] = oc_ticks() + OC_TRIG_TICKS;  /* a pulse at the note's onset */
         oc_gate_write(part, 1);
-    } else if (oc_out_mode[part] != OC_OUT_CLOCK) {
+    } else if (oc_out_mode(part) != OC_OUT_CLOCK) {
         oc_gate_write(part, 1);
     }
 }
@@ -92,7 +98,7 @@ static void oc_note_off(uint32_t part, uint32_t note)
     (void)note;
     if (part >= NPART)
         return;
-    if (oc_out_mode[part] != OC_OUT_TRIG)
+    if (oc_out_mode(part) != OC_OUT_TRIG)
         oc_gate_write(part, 0);
 }
 
@@ -102,7 +108,7 @@ void oc_out_tick(void)
 {
     uint32_t now = oc_ticks(), i;
     for (i = 0; i < NTRK; i++)
-        if (oc_out_mode[i] == OC_OUT_TRIG && oc_trig_until[i] && now >= oc_trig_until[i]) {
+        if (oc_out_mode(i) == OC_OUT_TRIG && oc_trig_until[i] && now >= oc_trig_until[i]) {
             oc_trig_until[i] = 0;
             oc_gate_write(i, 0);
         }
