@@ -21,6 +21,9 @@
 static uint32_t oc_samples;               /* the samples since power-on */
 static uint32_t oc_ticks(void) { return oc_samples; }
 static uint32_t oc_ms(void) { return oc_samples * 1000u / FS; }
+/* the time in microseconds: the MIDI clock's unit (the host build counts in
+ * milliseconds, the same arithmetic in a different unit) */
+static uint32_t oc_now_us(void) { return (uint32_t)(((uint64_t)oc_samples * 1000000u) / FS); }
 
 /* the C library's own memset / memcpy / memcmp, as the FM-1 build has them
  * (the device's own libc.c; here the host's, remapped so the two do not clash) */
@@ -47,7 +50,9 @@ static uint32_t oc_ms(void) { return oc_samples * 1000u / FS; }
 #define MIDI_TIME_NOW() fm1_ms
 #define MIDI_TICKS_PER_MS 1u
 #else
-#define MIDI_TIME_NOW() oc_ticks()
+/* the device's is in microseconds: the clock's own unit, fine enough for the
+ * phase (a pulse's place to a microsecond) */
+#define MIDI_TIME_NOW() oc_now_us()
 #define MIDI_TICKS_PER_MS 1000u
 #endif
 #include "../parts/oc_state.c"             /* the input, the bend, the inert engine state */
@@ -132,3 +137,6 @@ void oc_clock_advance(uint32_t samples)
 
 /* the sample rate the engine counts at */
 uint32_t oc_sample_rate(void) { return FS; }
+
+#include "../parts/oc_boot.c"   /* the power-on (it needs the transport, above) */
+#include "../parts/oc_clock.c"  /* the external clock (the engine's MIDI clock path) */

@@ -23,6 +23,10 @@ extern "C" {
 /* the boot: the defaults and the empty patterns */
 void oc_engine_init(void);
 
+/* the power-on: the generators on the tracks, and the transport running. The
+ * port composes, so it does not wait to be played. */
+void oc_power_on(void);
+
 /* the clock: the platform advances it by the samples that passed. The engine
  * counts in the sample at FS, exactly as the FM-1 does, and runs the blocks. */
 void oc_clock_advance(uint32_t samples);
@@ -38,6 +42,17 @@ void oc_transport(uint8_t request);
 
 /* is the transport running? */
 uint8_t oc_playing(void);
+
+/* the clock source: 0 = the port's own tempo, 2 = an external clock, which
+ * arrives on the module's first digital input as clock pulses */
+void oc_clock_source(uint8_t source);
+
+/* a clock pulse from the external clock (the engine's own MIDI clock path:
+ * the pulses are what it follows) */
+void oc_clock_pulse(void);
+
+/* a start from the external clock */
+void oc_clock_start(void);
 
 /* --- the platform's side --- */
 

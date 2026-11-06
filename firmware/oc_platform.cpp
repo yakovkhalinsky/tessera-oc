@@ -141,6 +141,40 @@ void oc_gate_write(uint32_t ch, uint32_t on)
 /* ------------------------------------------------------------- the module --- */
 static IntervalTimer oc_timer;
 
+/* The external clock: the rig's clock comes in on the first digital input, as
+ * a pulse train (a patch's clock is not MIDI). The port watches for the pulses
+ * and, once they are there, hands them to the engine's clock path - the same
+ * one a MIDI clock uses - and follows them.
+ *
+ * The pulses before the switch are counted, not used: the engine starts on the
+ * first start it is sent, and the phase it keeps afterwards is the pulse grid's,
+ * so the notes land on the rig's beats. The bar's downbeat may be a beat off
+ * the rig's; on a rig that sends a clock, that is the clock's business.
+ *
+ * The input is pulled down, not up: the rig's gates are 5 V and the pin is
+ * 3.3 V, so a pull-up would hold a low gate high. Pulled down, an unpatched
+ * input reads low and stays there. */
+#define OC_CLOCK_PULSES_TO_FOLLOW 24u    /* a beat, before the port follows */
+static uint8_t oc_clock_level;
+static uint32_t oc_clock_pulses;
+static uint8_t oc_clock_following;
+
+static void oc_clock_watch(void)
+{
+    uint8_t level = digitalReadFast(PIN_TR1);
+    if (level && !oc_clock_level) {              /* a rising edge: a pulse */
+        oc_clock_pulses++;
+        if (oc_clock_following)
+            oc_clock_pulse();
+        else if (oc_clock_pulses >= OC_CLOCK_PULSES_TO_FOLLOW) {
+            oc_clock_following = 1;
+            oc_clock_source(2);                  /* the engine takes the clock */
+            oc_clock_start();                   /* and starts on it */
+        }
+    }
+    oc_clock_level = level;
+}
+
 /* The module's tick to the engine's samples: the fraction is kept, so the rate
  * is exact whatever the tick's jitter is (60 us is 2.646 samples). */
 static uint32_t oc_sample_acc_q16;
@@ -151,6 +185,7 @@ static void oc_tick(void)
     oc_sample_acc_q16 += (uint32_t)(((uint64_t)oc_sample_rate() * OC_TICK_US << 16) / 1000000u);
     n = oc_sample_acc_q16 >> 16;
     oc_sample_acc_q16 &= 0xFFFFu;
+    oc_clock_watch();
     oc_clock_advance(n);
     oc_out_tick();
 }
@@ -178,6 +213,7 @@ static uint8_t oc_buttons_edges(void)
 
 void setup(void)
 {
+    pinMode(PIN_TR1, INPUT_PULLDOWN);           /* the rig's clock in (see oc_clock_watch) */
     pinMode(PIN_BUT_TOP, INPUT_PULLUP);
     pinMode(PIN_BUT_BOT, INPUT_PULLUP);
     pinMode(PIN_BUT_L, INPUT_PULLUP);
@@ -200,6 +236,7 @@ void setup(void)
 
     oc_cal_load();
     oc_engine_init();
+    oc_power_on();
 
     oc_timer.begin(oc_tick, OC_TICK_US);
     oc_timer.priority(128);
