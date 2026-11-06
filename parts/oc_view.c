@@ -144,6 +144,21 @@ const uint8_t *oc_cv_rows(uint8_t *count)
     return CV_ROWS;
 }
 
+/* the modulation matrix's slots: each one's source, its destination and its
+ * amount. The matrix is the port's own: on a rig the cords move the CV out
+ * and the gates, not a synth's voices. */
+static const uint8_t MOD_ROWS[] = {
+    P_M1SRC, P_M1DST, P_M1AMT,
+    P_M2SRC, P_M2DST, P_M2AMT,
+    P_M3SRC, P_M3DST, P_M3AMT,
+    P_M4SRC, P_M4DST, P_M4AMT,
+};
+const uint8_t *oc_mod_rows(uint8_t *count)
+{
+    *count = NELEM(MOD_ROWS);
+    return MOD_ROWS;
+}
+
 /* the track's key, scale, transpose, quantize and its octave on the CV */
 static const uint8_t SCL_ROWS[] = {P_ROOT, P_SCALE, P_TRANS, P_QUANT, P_E0};
 const uint8_t *oc_scl_rows(uint8_t *count)

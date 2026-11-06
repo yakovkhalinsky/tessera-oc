@@ -90,6 +90,7 @@ static const UiPage PAGES[] = {
     {"GEN", 0, 0, 1},
     {"SCL", 0, 0, 2},
     {"CV", 0, 0, 3},
+    {"MOD", 0, 0, 4},
     {"PROJ", PAGE_PROJ, sizeof PAGE_PROJ / sizeof PAGE_PROJ[0], 0},
 };
 
@@ -125,10 +126,18 @@ static uint32_t ui_build_rows(void)
                 ui_rows[n].arg = 0;
                 n++;
             }
-        } else {
+        } else if (p->gen_page == 3u) {
             ids = oc_cv_rows(&count);
             for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
                 ui_rows[n].kind = ROW_E;
+                ui_rows[n].id = ids[i];
+                ui_rows[n].arg = 0;
+                n++;
+            }
+        } else {
+            ids = oc_mod_rows(&count);
+            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+                ui_rows[n].kind = ROW_P;
                 ui_rows[n].id = ids[i];
                 ui_rows[n].arg = 0;
                 n++;

@@ -47,10 +47,10 @@ whole work stays under the licence of the engine it carries.
 |---|---|---|
 | **0** | The survey and the plan ([PORT-PLAN.md](PORT-PLAN.md)) | done |
 | **1** | The engine without an audio path: the time base, the LFO and the engine constants split out of the audio files, and the o_C engine built on them | **done** |
-| **2** | The platform layer: the module's tick, the CV and gate outputs, the encoders, the buttons and the storage | **started** |
-| **3** | The output mapping: the notes to CV, gates and MIDI; the clock out | |
-| **4** | The UI, in the o_C idiom: two encoders, four buttons, a 128×64 display | |
-| **5** | Packaging: the PlatformIO build, the flash, the rig | |
+| **2** | The platform layer: the module's tick, the CV and gate outputs, the encoders, the buttons, the storage | **done** |
+| **3** | The output mapping: the notes to CV, gates and triggers; the clock out; the modulation matrix on the CV | **done** |
+| **4** | The UI, in the o_C idiom: two encoders, four buttons, a 128×64 display | **done** (a first pass) |
+| **5** | Packaging: the PlatformIO build, the flash, the rig | the build is done; the rig is untested |
 
 Phase 1's acceptance criterion was that the port plays what the FM-1 plays. It does:
 the shared generator test runs against the FM-1's own baseline, **342 checks, none

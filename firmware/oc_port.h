@@ -86,6 +86,7 @@ void oc_track_param_set(uint32_t tr, uint32_t id, int32_t v);
 const uint8_t *oc_gen_rows(uint32_t gen, uint8_t *count);
 const uint8_t *oc_scl_rows(uint8_t *count);
 const uint8_t *oc_cv_rows(uint8_t *count);
+const uint8_t *oc_mod_rows(uint8_t *count);
 uint32_t oc_cv_scale(uint32_t part);
 uint32_t oc_out_mode(uint32_t part);
 
