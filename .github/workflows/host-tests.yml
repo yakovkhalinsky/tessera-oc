@@ -30,6 +30,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      # The storage is read only (ZC, issuecomment-6677339063): the port never
+      # writes the program's flash and never writes the EEPROM (the
+      # calibration belongs to the module's own firmware). A write path is the
+      # one thing that can turn a firmware into a brick, so it is not in the
+      # port at all - and the build says so.
+      - name: no write path to the flash or the EEPROM
+        run: |
+          if grep -rnE 'flash_write|flash_erase|eeprom_write|lfs_format|lfs_file_write|lfs_remove|lfs_rename|EEPROM\.(put|write|update)|eepromemu_|LittleFS_Program|\.format\(|eraseFiles' firmware/ parts/; then
+            echo "::error::the port has a write path to the flash or the EEPROM"
+            exit 1
+          fi
       - name: install PlatformIO
         run: pip install platformio
       - name: build for the Teensy 4.0
