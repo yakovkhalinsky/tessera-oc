@@ -192,6 +192,44 @@ static void check_shift(void)
           seq(EX(DN(BOT, 0), HS(BOT), HE(BOT)), 3));
 }
 
+/* the shift is latched at the press: BOTTOM released first does not drop it */
+static void check_shift_latch(void)
+{
+    fresh(0);
+    run(UI_BTN_BOT, 20); run(UI_BTN_BOT | UI_BTN_L, 20);
+    run(UI_BTN_L, 10); run(0, 10);
+    check("shift-latch: BOTTOM released first, L taps with the shift",
+          seq(EX(DN(BOT, 0), DN(PUSH_L, 1), TP(PUSH_L, 1)), 3));
+
+    fresh(0);
+    run(UI_BTN_L, 20); run(UI_BTN_L | UI_BTN_BOT, 20);
+    run(UI_BTN_BOT, 10); run(0, 10);
+    check("shift-latch: L down before BOTTOM is no shift at all",
+          seq(EX(DN(PUSH_L, 0), DN(BOT, 0), TP(PUSH_L, 0), TP(BOT, 0)), 4));
+
+    fresh(0);
+    run(UI_BTN_BOT, 20); run(UI_BTN_BOT | UI_BTN_R, 20);
+    run(UI_BTN_R, 700); run(0, 10);
+    check("shift-latch: the hold, the long and the hold end carry the shift",
+          seq(EX(DN(BOT, 0), DN(PUSH_R, 1),
+                 E_(UI_SRC_PUSH_R, UI_EV_HOLD_START, 0, 0, 0, 1),
+                 E_(UI_SRC_PUSH_R, UI_EV_LONG, 0, 0, 0, 1),
+                 E_(UI_SRC_PUSH_R, UI_EV_HOLD_END, 0, 0, 0, 1)), 5));
+
+    fresh(0);
+    run(UI_BTN_BOT, 40); run(UI_BTN_BOT | UI_BTN_TOP, 20);
+    run(UI_BTN_TOP, 10); run(0, 10);
+    check("shift-latch: TOP's deferred DOWN carries the press-time shift",
+          seq(EX(DN(BOT, 0), DN(TOP, 1)), 2));
+
+    fresh(0);
+    run(UI_BTN_BOT, 20); run(UI_BTN_BOT | UI_BTN_L, 20);
+    run(UI_BTN_BOT, 10); run(0, 10);
+    run(UI_BTN_L, 20); run(0, 10);
+    check("shift-latch: the latch clears on the next press",
+          seq(EX(DN(BOT, 0), DN(PUSH_L, 1), TP(PUSH_L, 1), DN(PUSH_L, 0), TP(PUSH_L, 0)), 5));
+}
+
 /* TOP + BOTTOM within the window, either way round */
 static void check_chord(void)
 {
@@ -376,6 +414,7 @@ int main(void)
     check_debounce();
     check_tap_hold_long();
     check_shift();
+    check_shift_latch();
     check_chord();
     check_boot_latch();
     check_turn();

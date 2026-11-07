@@ -6,6 +6,9 @@
 /* bit i of the masks is button i: L, R, TOP, BOT */
 static const uint8_t BTN_SRC[4] = {UI_SRC_PUSH_L, UI_SRC_PUSH_R, UI_SRC_TOP, UI_SRC_BOT};
 
+/* and back: PUSH_L, PUSH_R, TOP as bits (a button's events carry its press-time shift) */
+static const uint8_t SRC_BTN[3] = {UI_BTN_L, UI_BTN_R, UI_BTN_TOP};
+
 /* a press that counts: stable, not latched */
 static int live(const ui_input_t *s, uint8_t bit)
 {
@@ -25,7 +28,10 @@ static void push(ui_input_t *s, uint8_t src, uint8_t kind, int32_t n, uint32_t d
     e->n = (int16_t)n;
     e->dt = (uint16_t)(dt > 65535u ? 65535u : dt);
     e->fine = fine;
-    e->shift = (uint8_t)(src != UI_SRC_BOT && src != UI_SRC_CHORD_TB && live(s, UI_BTN_BOT));
+    if (src == UI_SRC_PUSH_L || src == UI_SRC_PUSH_R || src == UI_SRC_TOP)
+        e->shift = (uint8_t)((s->shift_at_press & SRC_BTN[src - UI_SRC_PUSH_L]) ? 1u : 0u);
+    else
+        e->shift = (uint8_t)(src != UI_SRC_BOT && src != UI_SRC_CHORD_TB && live(s, UI_BTN_BOT));
     s->head++;
 }
 
@@ -47,6 +53,10 @@ static void on_press(ui_input_t *s, uint32_t i, uint32_t now)
     s->used &= (uint8_t)~bit;
     s->long_done &= (uint8_t)~bit;
     s->hold_done &= (uint8_t)~bit;
+    if (bit != UI_BTN_BOT && live(s, UI_BTN_BOT))
+        s->shift_at_press |= bit;     /* latch the shift at the press */
+    else
+        s->shift_at_press &= (uint8_t)~bit;
     /* another control pressed while BOTTOM is down: BOTTOM was a shift */
     if (bit != UI_BTN_BOT && live(s, UI_BTN_BOT))
         s->used |= UI_BTN_BOT;

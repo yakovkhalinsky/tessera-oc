@@ -35,9 +35,11 @@ cc -O2 -w -Ifirmware -I"$TESSERA/firmware/src" -o "$OUT/oc_port_test" tests/oc_p
 # the UI's input core (parts/oc_ui_input.c), and once more with the chord window off
 cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_test" tests/oc_ui_test.c parts/oc_ui_input.c
 cc -std=c99 -Wall -Wextra -Werror -DUI_CHORD_MS=0u -Iparts -c -o "$OUT/oc_ui_input_nochord.o" parts/oc_ui_input.c
+# the UI's screen router (parts/oc_ui_nav.c)
+cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_nav_test" tests/oc_ui_nav_test.c parts/oc_ui_nav.c
 
 [ "$1" = build ] && exit 0
 
 # the baseline is the FM-1's: the port must play exactly what the FM-1 plays
 "$OUT/oc_engine_test" "$TESSERA/tests/tessera_baseline.txt" build/oc_log || exit 1
-"$OUT/oc_port_test" && exec "$OUT/oc_ui_test"
+"$OUT/oc_port_test" && "$OUT/oc_ui_test" && exec "$OUT/oc_ui_nav_test"
