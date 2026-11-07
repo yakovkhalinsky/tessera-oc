@@ -372,6 +372,7 @@ static void check_ring(void)
         dl += sm.dl;
     }
     check("ring: 20 fast detents are 20 detents", n == 20 && dl == 20);
+    check("ring: a ring with room drops nothing", ring1.dropped == 0u);
 
     /* the ring fills up: the samples that do not fit wait in the carry */
     n = 0;
@@ -385,6 +386,7 @@ static void check_ring(void)
         dr += sm.dr;
     }
     check("ring: a full ring holds 64 samples", n == 64);
+    check("ring: the 36 samples that did not fit are counted", ring2.dropped == 36u);
     ui_ring_put(&ring2, 3000u, 0, 0, 0);
     while (ui_ring_get(&ring2, &sm)) {
         n++;

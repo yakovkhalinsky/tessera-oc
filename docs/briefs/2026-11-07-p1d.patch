@@ -1,0 +1,185 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1a47be007adb67b8d1ed40afa26771a0fa6955b5..c80c520665cff9a5cd6b1a04a0f8020b6ac85c33 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,11 @@ The port's releases. The version is the one the firmware carries
+ ### UI, phase 1a: the input core (no change on the module yet)
+ - `parts/oc_ui_input.c`: the buttons and encoders as events (5 ms debounce, tap ≤ 400 ms, hold from 400 ms, long at 600 ms, BOTTOM as shift (each event says whether BOTTOM is held), TOP + BOTTOM chord within `UI_CHORD_MS` = 40 ms either way round, boot-latched buttons ignored until released, value acceleration) and the 1 kHz sampler's ring. Host-tested in `tests/oc_ui_test.c`; not wired into the firmware until phase 1b. Plan: `docs/UI-PLAN.md`.
+ 
++### UI, phase 1d: the sampler's follow-ups
++- `firmware/oc_ui.cpp`: the sampler's timer priority is set before `begin()`, so the channel never starts at the framework's default. On the Teensy 4 all IntervalTimers share the PIT's one interrupt at the highest priority asked for (the tick's 80), so the 160 never raises it and the sampler runs after the tick in the same handler (1c said "below the tick"; the comments and the guide now say how it works).
++- `parts/oc_ui_input.c`: the ring counts the samples that find it full (`ui_ring_t.dropped`; their detents stay in the carry); INFO shows it as `RING`, next to the event queue's `DROP EV`, and the storage moves to the version line. Host-tested (`tests/oc_ui_test.c`, 2 checks).
++- `docs/UI-PLAN.md` §3.4: a note on why 1 kHz polling is fine for the detented encoders.
++
+ ### UI, phase 1c: the shell
+ - `firmware/oc_ui.cpp` is the UI's shell. A 1 kHz sampler (an IntervalTimer of its own, priority 160, below the tick's 80; started in normal mode only, next to the tick) reads the four buttons and the two encoders into the input core's ring; `ui_service()` in `loop()` drains it through the input core (`parts/oc_ui_input.c`) into the screen router (`parts/oc_ui_nav.c`) and applies the actions: play / stop, restart, the track, the tempo (not while following TR1), the value (with the acceleration), enter, the default.
+ - The screens: OVERVIEW (the old HOME; the cursor on a `TRACK` row selects it, an R tap opens TRACK), TRACK with the GEN, SCL, CV and MOD tabs, PERFORM (the four tracks; its controls come in phase 5), PROJECT (load only, the storage is read only), INFO (the version, the longest engine block, the draw, flush and loop timings, the storage, the dropped events) and the screen menu (an L long press). The footers name the controls each screen answers.
+diff --git a/docs/GUIDE.md b/docs/GUIDE.md
+index 6062a92215bb2db9427e868fbb301abb1a2f00db..38cceb58f3af84cda11b1efb3908832fe025dbef 100644
+--- a/docs/GUIDE.md
++++ b/docs/GUIDE.md
+@@ -48,7 +48,8 @@ LEFT is play / stop as calibrated.
+ The module has no gate jacks, no digital outs and no MIDI out.
+ 
+ The controls are read 1000 times a second by a timer of their own
+-(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), below the engine's tick.
++(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), which never delays the
++engine's tick by more than about a microsecond.
+ A press counts after 5 ms; a press up to 400 ms is a tap. A button held through
+ the power-on does nothing until it has been let go.
+ 
+@@ -121,11 +122,14 @@ The storage is read only, so there is no save. Without a drive the screen says
+ 
+ ![INFO (the timings read 0 in the host's picture)](img/screen-info.png)
+ 
+-The version; the longest engine block since the power-on (`BLK MAX`); the last
+-and the longest screen draw and flush, in microseconds; the longest gap between
+-two passes of the main loop (from two seconds after the boot); the storage
+-(`RO`, read only, or `OFF`); and how many control events were dropped. They
+-start again at every boot.
++The version and the storage (`STORE RO`, read only, or `STORE OFF`); the
++longest engine block since the power-on (`BLK MAX`); the last and the longest
++screen draw and flush, in microseconds; the longest gap between two passes of
++the main loop (from two seconds after the boot); and what the controls lost:
++`DROP EV`, the events the input queue had no room for, and `RING`, the 1 ms
++samples the sampler's buffer had no room for (a turn's detents are kept even
++then; a button press shorter than the gap can be missed). They start again at
++every boot.
+ 
+ ## The safe mode
+ 
+diff --git a/docs/UI-PLAN.md b/docs/UI-PLAN.md
+index ce803783fea558da3bd658d8c73d330a7895465a..5fe67c2c551cf12791d0249d129179d4d68f2f4f 100644
+--- a/docs/UI-PLAN.md
++++ b/docs/UI-PLAN.md
+@@ -162,6 +162,17 @@ loop polling but make the flush page-sliced (§5.4) so a loop pass is never long
+ **Pin modes untouched. Only reads.** (This touches interrupt configuration, so Acid Burn reviews it
+ explicitly.)
+ 
++**Note (p1d): 1 kHz polling is fine for the detented encoders.** A detent is 4 quadrature states, and
++the quadrature table (`oc_enc_step`) only loses a step when both pins change between two samples, so
++1 kHz keeps every step up to 1000 state changes a second, 250 detents a second. A fast hand spin of a
++24-detent encoder (about 3 turns a second) is about 72 detents, 288 changes a second: a margin of
++about 3.5 for uneven phases and contact bounce. The ring holds 64 ms of samples; a sample that finds it
++full is counted (INFO's `RING`), and its detents are kept in the carry, so only a button level can
++be lost. On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, which runs at the
++highest priority any channel asked for (the tick's 80): the sampler's 160 is set before `begin()` and
++never raises it, and its callback runs after the tick's in the same handler, so it never preempts
++the tick.
++
+ ### 3.5 Acceptance criteria (phase 1)
+ 
+ * All existing pages (HOME, GEN, SCL, CV, MOD, PROJ, re-homed as OVERVIEW / TRACK tabs / PROJECT) are reachable from the menu. The footer hint matches the real mapping on every screen.
+diff --git a/firmware/oc_ui.cpp b/firmware/oc_ui.cpp
+index df3b4e0851ff795e063cb5317e912bdc5402923a..6d522573b80f7b29e3036cc48ef7631fafd296ef 100644
+--- a/firmware/oc_ui.cpp
++++ b/firmware/oc_ui.cpp
+@@ -13,8 +13,8 @@
+  * the port's interface. So a generator's knobs are the same knobs the FM-1
+  * shows, with the same ranges and the same names.
+  *
+- * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, below
+- * the engine's tick) reads the six controls into a ring; the main loop drains
++ * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, on the
++ * engine tick's interrupt) reads the six controls into a ring; the main loop drains
+  * it into the input core (parts/oc_ui_input.c), whose events go to the screen
+  * router (parts/oc_ui_nav.c), and the router's actions are applied here, to
+  * the engine, through the port. The screens: OVERVIEW (the old HOME), TRACK
+@@ -252,13 +252,18 @@ static void ui_row_turn(const UiRow *row, int32_t steps)
+ }
+ 
+ /* --- the sampler --- */
+-/* The six controls, read at 1 kHz by a timer of their own (below the
+- * engine's tick, which keeps priority 80): the four buttons as a mask
++/* The six controls, read at 1 kHz by a timer of their own: the four buttons as a mask
+  * (UI_BTN_*, pressed = LOW) and the two encoders' detents, into a ring the
+  * main loop drains. The sampler starts only in normal mode (ui_start, from
+  * setup, next to the tick): the safe mode and the crash pager read the
+  * buttons themselves, as they always have. */
+ #define UI_SAMPLE_US 1000u
++/* On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, and it
++ * runs at the highest priority any running channel asked for: the tick's 80.
++ * 160 only says the sampler never raises it. The channels' callbacks run one
++ * after the other in that one handler, the tick's channel (begun first) checked
++ * first, so the sampler never preempts the tick; its body is about 1 us. The
++ * priority is set before begin(), so the channel never starts at the default. */
+ #define UI_SAMPLE_PRIORITY 160
+ 
+ static IntervalTimer ui_timer;
+@@ -331,7 +336,7 @@ static void draw_rows(uint32_t n, uint32_t cur)
+ static void draw_info(void)
+ {
+     char line[24];
+-    snprintf(line, sizeof line, "v%s", OC_VERSION_STRING);
++    snprintf(line, sizeof line, "v%s STORE %s", OC_VERSION_STRING, oc_storage_ok() ? "RO" : "OFF");
+     draw_line(1, line);
+     snprintf(line, sizeof line, "BLK MAX %lu US", (unsigned long)oc_diag_blk_max_us());
+     draw_line(2, line);
+@@ -341,7 +346,9 @@ static void draw_info(void)
+     draw_line(4, line);
+     snprintf(line, sizeof line, "LOOP MAX %lu US", (unsigned long)ui_loop_max_us);
+     draw_line(5, line);
+-    snprintf(line, sizeof line, "STORAGE %s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
++    /* the events the input core's queue dropped, and the samples the
++     * sampler's ring had no room for (their detents wait in the carry) */
++    snprintf(line, sizeof line, "DROP EV %u RING %lu", (unsigned)ui_in.dropped, (unsigned long)ui_ring.dropped);
+     draw_line(6, line);
+ }
+ 
+@@ -562,6 +569,6 @@ void ui_init(void)
+ void ui_start(void)
+ {
+     ui_in_init(&ui_in, ui_buttons_now(), millis());
+-    ui_timer.begin(ui_sample, UI_SAMPLE_US);
+     ui_timer.priority(UI_SAMPLE_PRIORITY);
++    ui_timer.begin(ui_sample, UI_SAMPLE_US);
+ }
+diff --git a/parts/oc_ui_input.c b/parts/oc_ui_input.c
+index 05f38046e6d154152797a4c646b3730b7806025b..60239b05bc650898b97c80f5fdbd2efbf102d8c1 100644
+--- a/parts/oc_ui_input.c
++++ b/parts/oc_ui_input.c
+@@ -203,8 +203,10 @@ void ui_ring_put(ui_ring_t *r, uint32_t ms, uint8_t buttons, int32_t dl, int32_t
+     ui_sample_t *e;
+     r->carry_l += dl;
+     r->carry_r += dr;
+-    if ((uint8_t)(h - r->tail) >= UI_RING)
+-        return;                       /* full: the detents wait in the carry */
++    if ((uint8_t)(h - r->tail) >= UI_RING) {
++        r->dropped++;                 /* full: counted; the detents wait in the carry */
++        return;
++    }
+     e = &r->buf[h & (UI_RING - 1u)];
+     e->ms = ms;
+     e->buttons = buttons;
+diff --git a/parts/oc_ui_input.h b/parts/oc_ui_input.h
+index 74dc7239fef2a340e6253884d55bccbcd64877aa..6a68a76fa8e7518bfb1a9fe38e6501fa1d12141b 100644
+--- a/parts/oc_ui_input.h
++++ b/parts/oc_ui_input.h
+@@ -70,6 +70,7 @@ typedef struct {
+ typedef struct {
+     volatile uint8_t head, tail;
+     int32_t carry_l, carry_r;
++    volatile uint32_t dropped;   /* samples that found the ring full (their detents wait in the carry) */
+     ui_sample_t buf[UI_RING];
+ } ui_ring_t;
+ 
+diff --git a/tests/oc_ui_test.c b/tests/oc_ui_test.c
+index 68899f2b19a285dfde9e95b3516a3685ebd377b0..56e8e06e83534a162ca7a0d1121edaf6b18d7edb 100644
+--- a/tests/oc_ui_test.c
++++ b/tests/oc_ui_test.c
+@@ -372,6 +372,7 @@ static void check_ring(void)
+         dl += sm.dl;
+     }
+     check("ring: 20 fast detents are 20 detents", n == 20 && dl == 20);
++    check("ring: a ring with room drops nothing", ring1.dropped == 0u);
+ 
+     /* the ring fills up: the samples that do not fit wait in the carry */
+     n = 0;
+@@ -385,6 +386,7 @@ static void check_ring(void)
+         dr += sm.dr;
+     }
+     check("ring: a full ring holds 64 samples", n == 64);
++    check("ring: the 36 samples that did not fit are counted", ring2.dropped == 36u);
+     ui_ring_put(&ring2, 3000u, 0, 0, 0);
+     while (ui_ring_get(&ring2, &sm)) {
+         n++;

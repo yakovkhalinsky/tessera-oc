@@ -70,6 +70,7 @@ typedef struct {
 typedef struct {
     volatile uint8_t head, tail;
     int32_t carry_l, carry_r;
+    volatile uint32_t dropped;   /* samples that found the ring full (their detents wait in the carry) */
     ui_sample_t buf[UI_RING];
 } ui_ring_t;
 

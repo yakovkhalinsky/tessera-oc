@@ -13,8 +13,8 @@
  * the port's interface. So a generator's knobs are the same knobs the FM-1
  * shows, with the same ranges and the same names.
  *
- * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, below
- * the engine's tick) reads the six controls into a ring; the main loop drains
+ * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, on the
+ * engine tick's interrupt) reads the six controls into a ring; the main loop drains
  * it into the input core (parts/oc_ui_input.c), whose events go to the screen
  * router (parts/oc_ui_nav.c), and the router's actions are applied here, to
  * the engine, through the port. The screens: OVERVIEW (the old HOME), TRACK
@@ -252,13 +252,18 @@ static void ui_row_turn(const UiRow *row, int32_t steps)
 }
 
 /* --- the sampler --- */
-/* The six controls, read at 1 kHz by a timer of their own (below the
- * engine's tick, which keeps priority 80): the four buttons as a mask
+/* The six controls, read at 1 kHz by a timer of their own: the four buttons as a mask
  * (UI_BTN_*, pressed = LOW) and the two encoders' detents, into a ring the
  * main loop drains. The sampler starts only in normal mode (ui_start, from
  * setup, next to the tick): the safe mode and the crash pager read the
  * buttons themselves, as they always have. */
 #define UI_SAMPLE_US 1000u
+/* On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, and it
+ * runs at the highest priority any running channel asked for: the tick's 80.
+ * 160 only says the sampler never raises it. The channels' callbacks run one
+ * after the other in that one handler, the tick's channel (begun first) checked
+ * first, so the sampler never preempts the tick; its body is about 1 us. The
+ * priority is set before begin(), so the channel never starts at the default. */
 #define UI_SAMPLE_PRIORITY 160
 
 static IntervalTimer ui_timer;
@@ -331,7 +336,7 @@ static void draw_rows(uint32_t n, uint32_t cur)
 static void draw_info(void)
 {
     char line[24];
-    snprintf(line, sizeof line, "v%s", OC_VERSION_STRING);
+    snprintf(line, sizeof line, "v%s STORE %s", OC_VERSION_STRING, oc_storage_ok() ? "RO" : "OFF");
     draw_line(1, line);
     snprintf(line, sizeof line, "BLK MAX %lu US", (unsigned long)oc_diag_blk_max_us());
     draw_line(2, line);
@@ -341,7 +346,9 @@ static void draw_info(void)
     draw_line(4, line);
     snprintf(line, sizeof line, "LOOP MAX %lu US", (unsigned long)ui_loop_max_us);
     draw_line(5, line);
-    snprintf(line, sizeof line, "STORAGE %s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
+    /* the events the input core's queue dropped, and the samples the
+     * sampler's ring had no room for (their detents wait in the carry) */
+    snprintf(line, sizeof line, "DROP EV %u RING %lu", (unsigned)ui_in.dropped, (unsigned long)ui_ring.dropped);
     draw_line(6, line);
 }
 
@@ -562,6 +569,6 @@ void ui_init(void)
 void ui_start(void)
 {
     ui_in_init(&ui_in, ui_buttons_now(), millis());
-    ui_timer.begin(ui_sample, UI_SAMPLE_US);
     ui_timer.priority(UI_SAMPLE_PRIORITY);
+    ui_timer.begin(ui_sample, UI_SAMPLE_US);
 }
