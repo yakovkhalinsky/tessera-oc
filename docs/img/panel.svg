@@ -2,13 +2,15 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 Yakov Khalinsky -->
 <!-- The uO_C rev A front panel (mxmxmx, 8HP), as Tessera-OC uses it: a schematic of the
-     controls and the jacks, not a to-scale drawing. docs/GUIDE.md explains each one. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="240" height="680" viewBox="0 0 240 680"
+     controls and the jacks, top to bottom as on the panel, not a to-scale drawing.
+     docs/GUIDE.md explains each one. The firmware calls the LEFT button TOP and the
+     RIGHT button BOTTOM (as calibrated, firmware/oc_platform.cpp). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="700" viewBox="0 0 240 700"
      font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" text-anchor="middle">
   <title>Tessera-OC on the uO_C rev A: the front panel</title>
-  <rect x="20" y="10" width="200" height="660" rx="6" fill="#2b2b2b" stroke="#111" stroke-width="2"/>
+  <rect x="20" y="10" width="200" height="680" rx="6" fill="#2b2b2b" stroke="#111" stroke-width="2"/>
   <circle cx="40" cy="26" r="5" fill="#111"/>
-  <circle cx="200" cy="654" r="5" fill="#111"/>
+  <circle cx="200" cy="674" r="5" fill="#111"/>
   <text x="120" y="44" font-size="13" fill="#eee">TESSERA-OC</text>
   <text x="120" y="60" font-size="9" fill="#aaa">uO_C rev A</text>
 
@@ -17,41 +19,44 @@
   <text x="120" y="118" font-size="11" fill="#9cf">OLED</text>
   <text x="120" y="134" font-size="9" fill="#9cf">128 x 64</text>
 
-  <!-- the encoders: each turns and pushes -->
-  <circle cx="62" cy="226" r="26" fill="#555" stroke="#ccc" stroke-width="2"/>
-  <circle cx="62" cy="226" r="11" fill="#777"/>
-  <text x="62" y="272" font-size="10" fill="#eee">L ENC</text>
-  <text x="62" y="285" font-size="8" fill="#aaa">turn + push</text>
-  <circle cx="178" cy="226" r="26" fill="#555" stroke="#ccc" stroke-width="2"/>
-  <circle cx="178" cy="226" r="11" fill="#777"/>
-  <text x="178" y="272" font-size="10" fill="#eee">R ENC</text>
-  <text x="178" y="285" font-size="8" fill="#aaa">turn + push</text>
+  <!-- the two buttons, side by side under the display -->
+  <circle cx="70" cy="190" r="10" fill="#ddd" stroke="#888"/>
+  <text x="70" y="216" font-size="10" fill="#eee">LEFT</text>
+  <text x="70" y="229" font-size="8" fill="#aaa">play / stop</text>
+  <circle cx="170" cy="190" r="10" fill="#ddd" stroke="#888"/>
+  <text x="170" y="216" font-size="10" fill="#eee">RIGHT</text>
+  <text x="170" y="229" font-size="8" fill="#aaa">restart / shift*</text>
 
-  <!-- the two buttons between the encoders -->
-  <circle cx="120" cy="204" r="9" fill="#ddd" stroke="#888"/>
-  <text x="120" y="190" font-size="9" fill="#eee">TOP</text>
-  <circle cx="120" cy="250" r="9" fill="#ddd" stroke="#888"/>
-  <text x="120" y="273" font-size="9" fill="#eee">BOT</text>
+  <!-- the encoders: each turns and pushes -->
+  <circle cx="70" cy="276" r="26" fill="#555" stroke="#ccc" stroke-width="2"/>
+  <circle cx="70" cy="276" r="11" fill="#777"/>
+  <text x="70" y="322" font-size="10" fill="#eee">L ENC</text>
+  <text x="70" y="335" font-size="8" fill="#aaa">turn + push</text>
+  <circle cx="170" cy="276" r="26" fill="#555" stroke="#ccc" stroke-width="2"/>
+  <circle cx="170" cy="276" r="11" fill="#777"/>
+  <text x="170" y="322" font-size="10" fill="#eee">R ENC</text>
+  <text x="170" y="335" font-size="8" fill="#aaa">turn + push</text>
 
   <!-- the jacks: three rows of four -->
   <g font-size="10" fill="#eee">
-    <text x="120" y="330" font-size="9" fill="#aaa">TRIGGER IN</text>
-    <circle cx="48" cy="360" r="14" fill="#999"/><circle cx="48" cy="360" r="6" fill="#111"/><text x="48" y="390">TR1</text>
-    <circle cx="96" cy="360" r="14" fill="#999"/><circle cx="96" cy="360" r="6" fill="#111"/><text x="96" y="390">TR2</text>
-    <circle cx="144" cy="360" r="14" fill="#999"/><circle cx="144" cy="360" r="6" fill="#111"/><text x="144" y="390">TR3</text>
-    <circle cx="192" cy="360" r="14" fill="#999"/><circle cx="192" cy="360" r="6" fill="#111"/><text x="192" y="390">TR4</text>
+    <text x="120" y="370" font-size="9" fill="#aaa">TRIGGER IN</text>
+    <circle cx="48" cy="398" r="14" fill="#999"/><circle cx="48" cy="398" r="6" fill="#111"/><text x="48" y="428">TR1</text>
+    <circle cx="96" cy="398" r="14" fill="#999"/><circle cx="96" cy="398" r="6" fill="#111"/><text x="96" y="428">TR2</text>
+    <circle cx="144" cy="398" r="14" fill="#999"/><circle cx="144" cy="398" r="6" fill="#111"/><text x="144" y="428">TR3</text>
+    <circle cx="192" cy="398" r="14" fill="#999"/><circle cx="192" cy="398" r="6" fill="#111"/><text x="192" y="428">TR4</text>
 
-    <text x="120" y="430" font-size="9" fill="#aaa">CV IN</text>
-    <circle cx="48" cy="460" r="14" fill="#999"/><circle cx="48" cy="460" r="6" fill="#111"/><text x="48" y="490">CV1</text>
-    <circle cx="96" cy="460" r="14" fill="#999"/><circle cx="96" cy="460" r="6" fill="#111"/><text x="96" y="490">CV2</text>
-    <circle cx="144" cy="460" r="14" fill="#999"/><circle cx="144" cy="460" r="6" fill="#111"/><text x="144" y="490">CV3</text>
-    <circle cx="192" cy="460" r="14" fill="#999"/><circle cx="192" cy="460" r="6" fill="#111"/><text x="192" y="490">CV4</text>
+    <text x="120" y="466" font-size="9" fill="#aaa">CV IN</text>
+    <circle cx="48" cy="494" r="14" fill="#999"/><circle cx="48" cy="494" r="6" fill="#111"/><text x="48" y="524">CV1</text>
+    <circle cx="96" cy="494" r="14" fill="#999"/><circle cx="96" cy="494" r="6" fill="#111"/><text x="96" y="524">CV2</text>
+    <circle cx="144" cy="494" r="14" fill="#999"/><circle cx="144" cy="494" r="6" fill="#111"/><text x="144" y="524">CV3</text>
+    <circle cx="192" cy="494" r="14" fill="#999"/><circle cx="192" cy="494" r="6" fill="#111"/><text x="192" y="524">CV4</text>
 
-    <text x="120" y="530" font-size="9" fill="#aaa">CV OUT (TRACKS 1-4)</text>
-    <circle cx="48" cy="560" r="14" fill="#c93"/><circle cx="48" cy="560" r="6" fill="#111"/><text x="48" y="590">A</text>
-    <circle cx="96" cy="560" r="14" fill="#c93"/><circle cx="96" cy="560" r="6" fill="#111"/><text x="96" y="590">B</text>
-    <circle cx="144" cy="560" r="14" fill="#c93"/><circle cx="144" cy="560" r="6" fill="#111"/><text x="144" y="590">C</text>
-    <circle cx="192" cy="560" r="14" fill="#c93"/><circle cx="192" cy="560" r="6" fill="#111"/><text x="192" y="590">D</text>
+    <text x="120" y="562" font-size="9" fill="#aaa">CV OUT (TRACKS 1-4)</text>
+    <circle cx="48" cy="590" r="14" fill="#c93"/><circle cx="48" cy="590" r="6" fill="#111"/><text x="48" y="620">A</text>
+    <circle cx="96" cy="590" r="14" fill="#c93"/><circle cx="96" cy="590" r="6" fill="#111"/><text x="96" y="620">B</text>
+    <circle cx="144" cy="590" r="14" fill="#c93"/><circle cx="144" cy="590" r="6" fill="#111"/><text x="144" y="620">C</text>
+    <circle cx="192" cy="590" r="14" fill="#c93"/><circle cx="192" cy="590" r="6" fill="#111"/><text x="192" y="620">D</text>
   </g>
-  <text x="120" y="630" font-size="8" fill="#aaa">schematic, not to scale</text>
+  <text x="120" y="646" font-size="7" fill="#aaa">* shift: once the phase 1 UI is wired in</text>
+  <text x="120" y="660" font-size="8" fill="#aaa">schematic, not to scale</text>
 </svg>

@@ -17,14 +17,22 @@ every push, renders them again and fails if they differ from the files here
 
 ![The uO_C rev A front panel, as Tessera-OC uses it](img/panel.svg)
 
+From the top: the display; the **LEFT** and **RIGHT** buttons side by side under
+it; the **L** and **R** encoders; then the trigger inputs, the CV inputs and the
+outputs. The code calls the LEFT button **TOP** and the RIGHT button **BOTTOM**.
+Which pin each one is comes from the calibration, not from a fixed pin: the
+`FLIPCONTROLS` flag picks the plain or the flipped pinout
+(`firmware/oc_platform.cpp:567`, the tables at `firmware/oc_port.h:137-138`).
+LEFT is play / stop as calibrated.
+
 | Control or jack | What it does on `main` |
 |---|---|
 | **L encoder, turn** | moves the cursor up and down the list (it wraps round) |
 | **L encoder, push** | nothing yet |
 | **R encoder, turn** | changes the value in the row under the cursor |
 | **R encoder, push** | nothing yet |
-| **TOP button** | play / stop |
-| **BOTTOM button** | restart from the top. Held at power-on, it starts the **safe mode** |
+| **LEFT button** (TOP in the code) | play / stop |
+| **RIGHT button** (BOTTOM in the code) | restart from the top. Held at power-on, it starts the **safe mode** |
 | **TR1** | clock in: the rig's clock, counted on the falling edge |
 | **TR2 – TR4** | read, but not used |
 | **CV1 – CV4** | not used |
@@ -61,7 +69,7 @@ is the footer.
 When the L encoder's cursor lands on a `TRACK` row, that track becomes the
 selected one (`T1` – `T4` on the top line).
 
-The footer still says `T:PAGE`, but on `main` the TOP button plays and stops.
+The footer still says `T:PAGE`, but on `main` the LEFT button plays and stops.
 The other pages in the code (GEN, SCL, CV, MOD, PROJ) cannot be reached from the
 panel yet.
 
@@ -69,15 +77,15 @@ panel yet.
 
 ![The safe mode's screen](img/screen-safe-mode.png)
 
-To start in safe mode, hold the **BOTTOM** button while you power on. This is
+To start in safe mode, hold the **RIGHT** button while you power on. This is
 what `setup()` in `firmware/oc_platform.cpp` does:
 
 - After the button pins get their pull-ups, it waits **25 ms** for them to settle.
 - It then reads the pins **3 times, 10 ms apart**. A button counts as held only if
   its pin reads low on **all three** samples.
-- The calibration, which says which button is BOTTOM, has not been read yet. So
-  either of the two button pins (4 and 5) is accepted. In practice either button
-  held at power-on starts the safe mode.
+- The calibration, which says which pin is the RIGHT (BOTTOM) button, has not
+  been read yet. So either of the two button pins (4 and 5) is accepted. In
+  practice either button held at power-on starts the safe mode.
 
 In the safe mode the module runs:
 
@@ -104,8 +112,8 @@ the report, seven lines to a page.
 
 | Button | In the crash pager |
 |---|---|
-| **TOP** | the next page (after the last page it goes back to the first) |
-| **BOTTOM** | go on with the boot |
+| **LEFT** (TOP) | the next page (after the last page it goes back to the first) |
+| **RIGHT** (BOTTOM) | go on with the boot |
 
 The pager first waits until both buttons are released, so a button already held
 at power-on does not count. After that each press has to be released before the
@@ -138,15 +146,15 @@ With no report but a boot that stopped part of the way through, the screen shows
 
 ## Coming: phase 1 of the UI (PR #4 / #5)
 
-These are **not on the module yet**:
+These are merged but **not on the module yet** (host-tested only; the firmware
+does not use them until phase 1c):
 
-- **PR #4** (merged) adds the new input core: debounce, tap, hold and long
-  presses, BOTTOM as a shift, the TOP + BOTTOM chord. It is host-tested only.
-  The firmware does not use it yet.
-- **PR #5** (a draft) adds the screen router. BOTTOM + L turn selects the track
-  on every screen. BOTTOM + R turn sets the tempo, or the EVOLVE amount on
-  PERFORM. An L long press opens the screen menu and an L tap goes back.
-  TOP + BOTTOM opens and closes PERFORM. TRACK gets tabs.
+- **PR #4**, the new input core: debounce, tap, hold and long presses, the
+  RIGHT button as a shift, the LEFT + RIGHT chord.
+- **PR #5**, the screen router. RIGHT + L turn selects the track on every
+  screen. RIGHT + R turn sets the tempo, or the EVOLVE amount on PERFORM. An L
+  long press opens the screen menu and an L tap goes back. LEFT + RIGHT opens
+  and closes PERFORM. TRACK gets tabs.
 
 When the shell is wired in (phase 1c), this guide's tables and pictures change
 with it.
