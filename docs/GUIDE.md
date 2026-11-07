@@ -161,5 +161,8 @@ tools/render_screens.sh        # writes docs/img/screen-*.png
 The pictures come from the code, so a change to a screen means rendering them
 again and committing the new PNGs. `tools/build_host.sh` (and so CI's host job)
 renders them into `build/render_check` and stops with
-`docs/img stale: run tools/render_screens.sh` if one differs from `docs/img`.
-The panel drawing (`docs/img/panel.svg`) is drawn by hand.
+`docs/img stale: run tools/render_screens.sh` if a screen differs, is missing
+or is left over in `docs/img`. The renderer runs on Linux only (it maps the
+firmware's fixed debug-register addresses); elsewhere `tools/build_host.sh`
+skips the check and says so. The panel drawing (`docs/img/panel.svg`) is drawn
+by hand.
