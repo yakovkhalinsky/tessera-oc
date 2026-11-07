@@ -113,13 +113,14 @@ firmware/            the port: the o_C engine
   oc_hal.h             the platform names the shared engine calls
   oc_platform.cpp      the module: the pins, the CV out, the calibration, the tick
   oc_display.cpp       the OLED (the SH1106, over the DAC's SPI bus)
-  oc_ui.cpp            the screen and the controls
+  oc_ui.cpp            the UI's shell: the 1 kHz controls sampler, the screens
+  oc_ui_parts.c        the UI's parts (parts/) as one unit of the firmware
   oc_storage.cpp       the module's own flash (the projects, four slots)
   oc_port.h            the engine's and the platform's interface
   oc_spi.h             the SPI bus the DAC and the OLED share
   oc_version.h         the release the firmware carries
   oc_imxrt1062.ld      the port's memory map (the engine's .pool and .noinit in .bss)
-parts/               the UI's pure-C parts (host-tested; not on the module yet)
+parts/               the UI's pure-C parts (host-tested; built into the firmware by oc_ui_parts.c)
   oc_ui_input.c        the buttons and the encoders as events
   oc_ui_nav.c          the screen router: the stack, the cursors, the control map
 tests/               the port's tests

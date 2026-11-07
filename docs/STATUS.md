@@ -20,7 +20,7 @@ Last updated 2026-11-07. Update this file at the start and end of every job (see
 
 ## Phases
 
-The brief for each job run so far is in `docs/briefs/2026-11-07-<phase>.md`: p1a, p1b, p1b-fix, guide, render-check, panel-layout-1 and panel-layout (run 2, the one that shipped).
+The brief for each job run so far is in `docs/briefs/2026-11-07-<phase>.md`: p1a, p1b, p1b-fix, guide, render-check, panel-layout-1, panel-layout (run 2, the one that shipped) and p1c.
 
 | Phase | What | State |
 |---|---|---|
@@ -29,8 +29,8 @@ The brief for each job run so far is in `docs/briefs/2026-11-07-<phase>.md`: p1a
 | guide | `docs/GUIDE.md`, the panel SVG, framebuffer PNG renders, a CI staleness check | merged, PR #6 (`4088c02`) |
 | tools | render check, two-way name compare, orphan PNG test | merged, PR #7 (`947ad82`) |
 | guide fix | the panel SVG shows the buttons stacked vertically between the encoders. Redraw them side by side above the encoders, and label them left (play/stop) and right (restart/shift) | merged, PR #10 (`a3464d2`) |
-| briefs | back-fill the job briefs under `docs/briefs/` and these rows | in review, draft PR #9 |
-| 1c | wire 1a/1b into the firmware (L/R push, control map, screen menu, existing pages re-homed). The first phase with a hex worth flashing | next (its brief goes in `docs/briefs/` first) |
+| briefs | back-fill the job briefs under `docs/briefs/` and these rows | merged, PR #9 (`ef0d859`) |
+| 1c | wire 1a/1b into the firmware (L/R push, control map, screen menu, existing pages re-homed). The first phase with a hex worth flashing | in review: job p1c, work commit f56ea3b, draft PR #11; next: Yakov tries the test hex on the module, then phase 2 |
 | 2 | the drawing kit, 3x5 font, golden snapshots | to do |
 | 3 | OVERVIEW lanes | to do |
 | 4 | the TRACK edit screen | to do |

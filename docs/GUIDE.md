@@ -2,9 +2,10 @@
 <!-- Copyright (C) 2026 Yakov Khalinsky -->
 # Tessera-OC: the panel and the controls
 
-This guide covers the firmware on `main`, release **v0.1.2**. It describes only
-what that firmware does today. The new controls that phase 1 of the UI plan
-([UI-PLAN.md](UI-PLAN.md)) brings are listed at the end as *coming*.
+This guide covers the firmware on `main`: release **v0.1.2** plus phase 1 of
+the UI plan ([UI-PLAN.md](UI-PLAN.md)), which is not released yet. Phase 1c
+wired the new input core and the screen router into the firmware, so the
+controls and the screens below are the ones a build of `main` has.
 
 The screen pictures are not mock-ups. `tools/render_screens` builds the
 firmware's own drawing code (`firmware/oc_display.cpp`, `oc_ui.cpp`,
@@ -22,23 +23,37 @@ it; the **L** and **R** encoders; then the trigger inputs, the CV inputs and the
 outputs. The code calls the LEFT button **TOP** and the RIGHT button **BOTTOM**.
 Which pin each one is comes from the calibration, not from a fixed pin: the
 `FLIPCONTROLS` flag picks the plain or the flipped pinout
-(`firmware/oc_platform.cpp:567`, the tables at `firmware/oc_port.h:137-138`).
+(`firmware/oc_platform.cpp:548`, the tables at `firmware/oc_port.h:137-138`).
 LEFT is play / stop as calibrated.
 
 | Control or jack | What it does on `main` |
 |---|---|
-| **L encoder, turn** | moves the cursor up and down the list (it wraps round) |
-| **L encoder, push** | nothing yet |
-| **R encoder, turn** | changes the value in the row under the cursor |
-| **R encoder, push** | nothing yet |
+| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where the cursor on a `TRACK` row selects that track |
+| **L encoder, tap** | back: closes the screen shown (at OVERVIEW it does nothing) |
+| **L encoder, long press** (600 ms) | opens the screen menu |
+| **R encoder, turn** | changes the value in the row under the cursor. A fast turn takes bigger steps (2, 4 or 8 a detent) on a wide range; turned while pushed in it is one step a detent; a list of names is always one step |
+| **R encoder, tap** | enter: on an OVERVIEW `TRACK` row it opens TRACK; on PROJECT it loads the slot |
+| **R encoder, long press** | on TRACK: puts the row's value back to its default |
 | **LEFT button** (TOP in the code) | play / stop |
-| **RIGHT button** (BOTTOM in the code) | restart from the top. Held at power-on, it starts the **safe mode** |
+| **RIGHT button** (BOTTOM in the code) | a tap restarts from the top. Held, it is a shift for the other controls (below). Held at power-on, it starts the **safe mode** |
+| **RIGHT + L turn** | selects the track (1 – 4, it wraps round), on every screen |
+| **RIGHT + R turn** | the tempo, on every screen but PERFORM (nothing while the clock follows TR1) |
+| **RIGHT + R tap** | on TRACK: the next tab (GEN, SCL, CV, MOD) |
+| **LEFT + RIGHT** together (within 40 ms) | opens PERFORM, and closes it again |
 | **TR1** | clock in: the rig's clock, counted on the falling edge |
 | **TR2 – TR4** | read, but not used |
 | **CV1 – CV4** | not used |
 | **A – D** | the CV outs, tracks 1 – 4: the pitch at 1 V an octave, with the gate riding on the same CV (see the README's *The outputs*) |
 
 The module has no gate jacks, no digital outs and no MIDI out.
+
+The controls are read 1000 times a second by a timer of their own
+(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), below the engine's tick.
+A press counts after 5 ms; a press up to 400 ms is a tap. A button held through
+the power-on does nothing until it has been let go.
+
+The footers use short names: `L` and `R` are the encoders' turns, `LP` and
+`RP` their pushes, `LL` a long L push and `RB` the RIGHT button.
 
 ## Power-on
 
@@ -50,28 +65,67 @@ At power-on the module shows these screens in order:
    below). Otherwise, if the last boot stopped part of the way through, the
    module shows `RESET AT STAGE n` for five seconds.
 2. The **splash**: the module's name and the firmware's version.
-3. **HOME**. If nothing is saved, the module composes for itself: track 1 gets
-   TURING, 2 gets EUCLID, 3 MARKOV and 4 MORPH, an octave apart, and it plays.
+3. **OVERVIEW** (its top line says `HOME`). If nothing is saved, the module
+   composes for itself: track 1 gets TURING, 2 gets EUCLID, 3 MARKOV and 4
+   MORPH, an octave apart, and it plays.
 
-## HOME
+## OVERVIEW
 
-![HOME after a power-on with nothing saved](img/screen-home.png)
+![OVERVIEW after a power-on with nothing saved](img/screen-home.png)
 
-The top line shows the page, the selected track and the tempo. The bottom line
-is the footer.
+The top line shows the selected track and the tempo. The bottom line is the
+footer.
 
-| Row | R encoder turn |
-|---|---|
-| `TEMPO` | 1 BPM per detent, from 40 to 240 BPM |
-| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list |
-| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) |
+| Row | R encoder turn | R tap |
+|---|---|---|
+| `TEMPO` | the tempo, from 40 to 240 BPM (faster turns, bigger steps) | nothing |
+| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list | opens TRACK for that track |
+| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) | nothing |
 
 When the L encoder's cursor lands on a `TRACK` row, that track becomes the
 selected one (`T1` – `T4` on the top line).
 
-The footer still says `T:PAGE`, but on `main` the LEFT button plays and stops.
-The other pages in the code (GEN, SCL, CV, MOD, PROJ) cannot be reached from the
-panel yet.
+## The screen menu
+
+![The screen menu](img/screen-menu.png)
+
+An L long press opens it from any screen. The L encoder moves the `>`, an R
+tap opens the screen, an L tap closes the menu.
+
+## TRACK
+
+![TRACK, the GEN tab, track 1](img/screen-track.png)
+
+The selected track's parameters, on four tabs: **GEN** (the generator's own
+knobs), **SCL** (the scale), **CV** (the CV out) and **MOD**. RIGHT + R tap goes
+to the next tab. The R encoder sets the row's value; an R long press puts it
+back to its default.
+
+## PERFORM
+
+![PERFORM](img/screen-perform.png)
+
+LEFT + RIGHT together opens it, and closes it again. In this phase it shows the
+four tracks' generators; the performance controls (mute, fill, the EVOLVE
+amount on RIGHT + R) come in phase 5.
+
+## PROJECT
+
+![PROJECT](img/screen-project.png)
+
+The four slots a project is kept in. An R tap loads the slot under the cursor.
+The storage is read only, so there is no save. Without a drive the screen says
+`SAVE OFF` and the version.
+
+## INFO
+
+![INFO (the timings read 0 in the host's picture)](img/screen-info.png)
+
+The version; the longest engine block since the power-on (`BLK MAX`); the last
+and the longest screen draw and flush, in microseconds; the longest gap between
+two passes of the main loop (from two seconds after the boot); the storage
+(`RO`, read only, or `OFF`); and how many control events were dropped. They
+start again at every boot.
 
 ## The safe mode
 
@@ -143,21 +197,6 @@ With no report but a boot that stopped part of the way through, the screen shows
 | 22 | the timer |
 | 23 | done |
 | 99 | running |
-
-## Coming: phase 1 of the UI (PR #4 / #5)
-
-These are merged but **not on the module yet** (host-tested only; the firmware
-does not use them until phase 1c):
-
-- **PR #4**, the new input core: debounce, tap, hold and long presses, the
-  RIGHT button as a shift, the LEFT + RIGHT chord.
-- **PR #5**, the screen router. RIGHT + L turn selects the track on every
-  screen. RIGHT + R turn sets the tempo, or the EVOLVE amount on PERFORM. An L
-  long press opens the screen menu and an L tap goes back. LEFT + RIGHT opens
-  and closes PERFORM. TRACK gets tabs.
-
-When the shell is wired in (phase 1c), this guide's tables and pictures change
-with it.
 
 ## Regenerating the pictures
 

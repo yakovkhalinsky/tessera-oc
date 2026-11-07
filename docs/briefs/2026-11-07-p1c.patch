@@ -1,0 +1,1041 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a7053d82361a982d51b67eb28da972448f5f75a7..1a47be007adb67b8d1ed40afa26771a0fa6955b5 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,12 @@ The port's releases. The version is the one the firmware carries
+ ### UI, phase 1a: the input core (no change on the module yet)
+ - `parts/oc_ui_input.c`: the buttons and encoders as events (5 ms debounce, tap ≤ 400 ms, hold from 400 ms, long at 600 ms, BOTTOM as shift (each event says whether BOTTOM is held), TOP + BOTTOM chord within `UI_CHORD_MS` = 40 ms either way round, boot-latched buttons ignored until released, value acceleration) and the 1 kHz sampler's ring. Host-tested in `tests/oc_ui_test.c`; not wired into the firmware until phase 1b. Plan: `docs/UI-PLAN.md`.
+ 
++### UI, phase 1c: the shell
++- `firmware/oc_ui.cpp` is the UI's shell. A 1 kHz sampler (an IntervalTimer of its own, priority 160, below the tick's 80; started in normal mode only, next to the tick) reads the four buttons and the two encoders into the input core's ring; `ui_service()` in `loop()` drains it through the input core (`parts/oc_ui_input.c`) into the screen router (`parts/oc_ui_nav.c`) and applies the actions: play / stop, restart, the track, the tempo (not while following TR1), the value (with the acceleration), enter, the default.
++- The screens: OVERVIEW (the old HOME; the cursor on a `TRACK` row selects it, an R tap opens TRACK), TRACK with the GEN, SCL, CV and MOD tabs, PERFORM (the four tracks; its controls come in phase 5), PROJECT (load only, the storage is read only), INFO (the version, the longest engine block, the draw, flush and loop timings, the storage, the dropped events) and the screen menu (an L long press). The footers name the controls each screen answers.
++- `firmware/oc_platform.cpp`: the old button edges are gone (the shell has the buttons now); the safe mode and the crash pager read the buttons as before. `firmware/oc_ui_parts.c` builds `parts/` into the firmware; `ui_nav_open()` is new in the router (host-tested).
++- `docs/GUIDE.md` describes the new controls and screens, with five new pictures (`screen-menu`, `screen-track`, `screen-perform`, `screen-project`, `screen-info`).
++
+ ### UI, phase 1b: the screen router (no change on the module yet)
+ - `parts/oc_ui_nav.c`: the screen stack (four deep), the cursors, the screen menu, TRACK's tabs and the global controls (BOTTOM + L selects the track and BOTTOM + R sets the tempo, except on PERFORM where it sets the EVOLVE amount, TOP plays and stops, a BOTTOM tap restarts, TOP + BOTTOM opens and closes PERFORM); it changes nothing in the engine, it tells the shell what to do. The L encoder moves the cursor and never changes the track.
+ - `parts/oc_ui_input.c`: a button's tap, hold and long carry the shift as it was when the button went down (BOTTOM released first no longer drops it). Host-tested in `tests/oc_ui_test.c` and `tests/oc_ui_nav_test.c`; stacked on phase 1a, wired into the firmware in phase 1c.
+diff --git a/README.md b/README.md
+index 96743872a3ce5db29ea591e525a8a192b31f5437..12d2a830e0a68f833de099403124ac0cde685afe 100644
+--- a/README.md
++++ b/README.md
+@@ -113,13 +113,14 @@ firmware/            the port: the o_C engine
+   oc_hal.h             the platform names the shared engine calls
+   oc_platform.cpp      the module: the pins, the CV out, the calibration, the tick
+   oc_display.cpp       the OLED (the SH1106, over the DAC's SPI bus)
+-  oc_ui.cpp            the screen and the controls
++  oc_ui.cpp            the UI's shell: the 1 kHz controls sampler, the screens
++  oc_ui_parts.c        the UI's parts (parts/) as one unit of the firmware
+   oc_storage.cpp       the module's own flash (the projects, four slots)
+   oc_port.h            the engine's and the platform's interface
+   oc_spi.h             the SPI bus the DAC and the OLED share
+   oc_version.h         the release the firmware carries
+   oc_imxrt1062.ld      the port's memory map (the engine's .pool and .noinit in .bss)
+-parts/               the UI's pure-C parts (host-tested; not on the module yet)
++parts/               the UI's pure-C parts (host-tested; built into the firmware by oc_ui_parts.c)
+   oc_ui_input.c        the buttons and the encoders as events
+   oc_ui_nav.c          the screen router: the stack, the cursors, the control map
+ tests/               the port's tests
+diff --git a/docs/GUIDE.md b/docs/GUIDE.md
+index 198f10ce07f582498b79c335e115be835c7aadfb..6062a92215bb2db9427e868fbb301abb1a2f00db 100644
+--- a/docs/GUIDE.md
++++ b/docs/GUIDE.md
+@@ -2,9 +2,10 @@
+ <!-- Copyright (C) 2026 Yakov Khalinsky -->
+ # Tessera-OC: the panel and the controls
+ 
+-This guide covers the firmware on `main`, release **v0.1.2**. It describes only
+-what that firmware does today. The new controls that phase 1 of the UI plan
+-([UI-PLAN.md](UI-PLAN.md)) brings are listed at the end as *coming*.
++This guide covers the firmware on `main`: release **v0.1.2** plus phase 1 of
++the UI plan ([UI-PLAN.md](UI-PLAN.md)), which is not released yet. Phase 1c
++wired the new input core and the screen router into the firmware, so the
++controls and the screens below are the ones a build of `main` has.
+ 
+ The screen pictures are not mock-ups. `tools/render_screens` builds the
+ firmware's own drawing code (`firmware/oc_display.cpp`, `oc_ui.cpp`,
+@@ -22,17 +23,23 @@ it; the **L** and **R** encoders; then the trigger inputs, the CV inputs and the
+ outputs. The code calls the LEFT button **TOP** and the RIGHT button **BOTTOM**.
+ Which pin each one is comes from the calibration, not from a fixed pin: the
+ `FLIPCONTROLS` flag picks the plain or the flipped pinout
+-(`firmware/oc_platform.cpp:567`, the tables at `firmware/oc_port.h:137-138`).
++(`firmware/oc_platform.cpp:548`, the tables at `firmware/oc_port.h:137-138`).
+ LEFT is play / stop as calibrated.
+ 
+ | Control or jack | What it does on `main` |
+ |---|---|
+-| **L encoder, turn** | moves the cursor up and down the list (it wraps round) |
+-| **L encoder, push** | nothing yet |
+-| **R encoder, turn** | changes the value in the row under the cursor |
+-| **R encoder, push** | nothing yet |
++| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where the cursor on a `TRACK` row selects that track |
++| **L encoder, tap** | back: closes the screen shown (at OVERVIEW it does nothing) |
++| **L encoder, long press** (600 ms) | opens the screen menu |
++| **R encoder, turn** | changes the value in the row under the cursor. A fast turn takes bigger steps (2, 4 or 8 a detent) on a wide range; turned while pushed in it is one step a detent; a list of names is always one step |
++| **R encoder, tap** | enter: on an OVERVIEW `TRACK` row it opens TRACK; on PROJECT it loads the slot |
++| **R encoder, long press** | on TRACK: puts the row's value back to its default |
+ | **LEFT button** (TOP in the code) | play / stop |
+-| **RIGHT button** (BOTTOM in the code) | restart from the top. Held at power-on, it starts the **safe mode** |
++| **RIGHT button** (BOTTOM in the code) | a tap restarts from the top. Held, it is a shift for the other controls (below). Held at power-on, it starts the **safe mode** |
++| **RIGHT + L turn** | selects the track (1 – 4, it wraps round), on every screen |
++| **RIGHT + R turn** | the tempo, on every screen but PERFORM (nothing while the clock follows TR1) |
++| **RIGHT + R tap** | on TRACK: the next tab (GEN, SCL, CV, MOD) |
++| **LEFT + RIGHT** together (within 40 ms) | opens PERFORM, and closes it again |
+ | **TR1** | clock in: the rig's clock, counted on the falling edge |
+ | **TR2 – TR4** | read, but not used |
+ | **CV1 – CV4** | not used |
+@@ -40,6 +47,14 @@ LEFT is play / stop as calibrated.
+ 
+ The module has no gate jacks, no digital outs and no MIDI out.
+ 
++The controls are read 1000 times a second by a timer of their own
++(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), below the engine's tick.
++A press counts after 5 ms; a press up to 400 ms is a tap. A button held through
++the power-on does nothing until it has been let go.
++
++The footers use short names: `L` and `R` are the encoders' turns, `LP` and
++`RP` their pushes, `LL` a long L push and `RB` the RIGHT button.
++
+ ## Power-on
+ 
+ ![The splash](img/screen-splash.png)
+@@ -50,28 +65,67 @@ At power-on the module shows these screens in order:
+    below). Otherwise, if the last boot stopped part of the way through, the
+    module shows `RESET AT STAGE n` for five seconds.
+ 2. The **splash**: the module's name and the firmware's version.
+-3. **HOME**. If nothing is saved, the module composes for itself: track 1 gets
+-   TURING, 2 gets EUCLID, 3 MARKOV and 4 MORPH, an octave apart, and it plays.
++3. **OVERVIEW** (its top line says `HOME`). If nothing is saved, the module
++   composes for itself: track 1 gets TURING, 2 gets EUCLID, 3 MARKOV and 4
++   MORPH, an octave apart, and it plays.
+ 
+-## HOME
++## OVERVIEW
+ 
+-![HOME after a power-on with nothing saved](img/screen-home.png)
++![OVERVIEW after a power-on with nothing saved](img/screen-home.png)
+ 
+-The top line shows the page, the selected track and the tempo. The bottom line
+-is the footer.
++The top line shows the selected track and the tempo. The bottom line is the
++footer.
+ 
+-| Row | R encoder turn |
+-|---|---|
+-| `TEMPO` | 1 BPM per detent, from 40 to 240 BPM |
+-| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list |
+-| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) |
++| Row | R encoder turn | R tap |
++|---|---|---|
++| `TEMPO` | the tempo, from 40 to 240 BPM (faster turns, bigger steps) | nothing |
++| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list | opens TRACK for that track |
++| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) | nothing |
+ 
+ When the L encoder's cursor lands on a `TRACK` row, that track becomes the
+ selected one (`T1` – `T4` on the top line).
+ 
+-The footer still says `T:PAGE`, but on `main` the LEFT button plays and stops.
+-The other pages in the code (GEN, SCL, CV, MOD, PROJ) cannot be reached from the
+-panel yet.
++## The screen menu
++
++![The screen menu](img/screen-menu.png)
++
++An L long press opens it from any screen. The L encoder moves the `>`, an R
++tap opens the screen, an L tap closes the menu.
++
++## TRACK
++
++![TRACK, the GEN tab, track 1](img/screen-track.png)
++
++The selected track's parameters, on four tabs: **GEN** (the generator's own
++knobs), **SCL** (the scale), **CV** (the CV out) and **MOD**. RIGHT + R tap goes
++to the next tab. The R encoder sets the row's value; an R long press puts it
++back to its default.
++
++## PERFORM
++
++![PERFORM](img/screen-perform.png)
++
++LEFT + RIGHT together opens it, and closes it again. In this phase it shows the
++four tracks' generators; the performance controls (mute, fill, the EVOLVE
++amount on RIGHT + R) come in phase 5.
++
++## PROJECT
++
++![PROJECT](img/screen-project.png)
++
++The four slots a project is kept in. An R tap loads the slot under the cursor.
++The storage is read only, so there is no save. Without a drive the screen says
++`SAVE OFF` and the version.
++
++## INFO
++
++![INFO (the timings read 0 in the host's picture)](img/screen-info.png)
++
++The version; the longest engine block since the power-on (`BLK MAX`); the last
++and the longest screen draw and flush, in microseconds; the longest gap between
++two passes of the main loop (from two seconds after the boot); the storage
++(`RO`, read only, or `OFF`); and how many control events were dropped. They
++start again at every boot.
+ 
+ ## The safe mode
+ 
+@@ -144,21 +198,6 @@ With no report but a boot that stopped part of the way through, the screen shows
+ | 23 | done |
+ | 99 | running |
+ 
+-## Coming: phase 1 of the UI (PR #4 / #5)
+-
+-These are merged but **not on the module yet** (host-tested only; the firmware
+-does not use them until phase 1c):
+-
+-- **PR #4**, the new input core: debounce, tap, hold and long presses, the
+-  RIGHT button as a shift, the LEFT + RIGHT chord.
+-- **PR #5**, the screen router. RIGHT + L turn selects the track on every
+-  screen. RIGHT + R turn sets the tempo, or the EVOLVE amount on PERFORM. An L
+-  long press opens the screen menu and an L tap goes back. LEFT + RIGHT opens
+-  and closes PERFORM. TRACK gets tabs.
+-
+-When the shell is wired in (phase 1c), this guide's tables and pictures change
+-with it.
+-
+ ## Regenerating the pictures
+ 
+ ```sh
+diff --git a/firmware/oc_diag.cpp b/firmware/oc_diag.cpp
+index 41c76d829dea9e43f87654c4091fb0e080f5e587..5e0473477ce0f95f9ec9183740dd886fdf6cd8d0 100644
+--- a/firmware/oc_diag.cpp
++++ b/firmware/oc_diag.cpp
+@@ -108,6 +108,9 @@ static uint32_t oc_us(uint32_t cycles)
+ 
+ uint32_t oc_diag_cyccnt(void) { return OC_DWT_CYCCNT; }
+ 
++/* the longest engine block, in microseconds, for the UI's INFO screen (read only) */
++uint32_t oc_diag_blk_max_us(void) { return oc_us(oc_persist.blk_max_cyc); }
++
+ /* the engine's block: the longest one */
+ void oc_diag_block(uint32_t cycles)
+ {
+diff --git a/firmware/oc_platform.cpp b/firmware/oc_platform.cpp
+index b0fad9cd191b39acdb79347938069bcf79bb2e4d..b021cc52dbfc36389385ebc6cc82140b32a75230 100644
+--- a/firmware/oc_platform.cpp
++++ b/firmware/oc_platform.cpp
+@@ -469,35 +469,16 @@ static void oc_tick(void)
+     oc_clock_out(n);
+ }
+ 
+-/* The buttons: the top one starts and stops the transport, the bottom one
+- * restarts it from the top. The encoders and the display come with the UI
+- * (Phase 4). */
+-#define BUT_TOP 1u
+-#define BUT_BOT 2u
+-#define BUT_L 4u
+-#define BUT_R 8u
+-static uint8_t oc_button_prev;
+-
+-static uint8_t oc_buttons_edges(void)
+-{
+-    uint8_t now = 0, edges;
+-    if (!digitalRead(oc_pins.but_top)) now |= BUT_TOP;
+-    if (!digitalRead(oc_pins.but_bot)) now |= BUT_BOT;
+-    if (!digitalRead(oc_pins.but_l)) now |= BUT_L;
+-    if (!digitalRead(oc_pins.but_r)) now |= BUT_R;
+-    edges = now & ~oc_button_prev;             /* only the edges */
+-    oc_button_prev = now;
+-    return edges;
+-}
+-
+ /* the screen and its controls */
+ void oc_display_init(void);
+ void oc_display_splash(void);
++/* The UI (oc_ui.cpp): the buttons and the encoders are its own now (phase
++ * 1c). ui_start runs its 1 kHz sampler, ui_service drains it: the top button
++ * starts and stops, the bottom one restarts, the rest is the screens'. */
+ void ui_init(void);
+-void ui_input(void);
++void ui_start(void);
++void ui_service(void);
+ void ui_draw(void);
+-void ui_page_next(int32_t dir);
+-void ui_button(int32_t which);
+ 
+ /* the safe mode: the bottom button held at power-on. Either of the two
+  * buttons that can be the bottom one (pins 4 and 5) is accepted: the flag
+@@ -604,6 +585,7 @@ void setup(void)
+     if (!oc_safe_mode) {
+         oc_timer.begin(oc_tick, OC_TICK_US);
+         oc_timer.priority(80);
++        ui_start();                       /* the controls' sampler, below the tick */
+     }
+     oc_stage(22);
+     oc_stage(23);
+@@ -613,7 +595,6 @@ void loop(void)
+ {
+     static uint32_t last_draw;
+     static uint32_t loops;
+-    uint8_t buttons;
+     bool diag = loops < 100u;               /* the first 100 iterations are
+                                              * reported, step by step */
+ 
+@@ -624,12 +605,6 @@ void loop(void)
+         return;
+     }
+ 
+-    buttons = oc_buttons_edges();
+-    if (buttons & BUT_TOP)
+-        oc_transport(oc_playing() ? 2u : 1u);    /* stop, or start */
+-    if (buttons & BUT_BOT)
+-        oc_transport(3u);                      /* restart from the top */
+-
+     /* the module's USB MIDI: the keys, the controllers and the clock. The
+      * packet is the USB-MIDI one - the cable, the status, the two data bytes -
+      * which is the shape the engine's MIDI in reads. */
+@@ -641,7 +616,7 @@ void loop(void)
+         oc_midi_in(pkt);
+     }
+ 
+-    ui_input();
++    ui_service();                                /* the controls: the sampler's ring */
+     if (millis() - last_draw >= 100u) {          /* ten screens a second */
+         last_draw = millis();
+         ui_draw();
+diff --git a/firmware/oc_ui.cpp b/firmware/oc_ui.cpp
+index 9471391684723b2bcd5de3f31181d551d5a10669..df3b4e0851ff795e063cb5317e912bdc5402923a 100644
+--- a/firmware/oc_ui.cpp
++++ b/firmware/oc_ui.cpp
+@@ -1,6 +1,6 @@
+ /* SPDX-License-Identifier: GPL-3.0-only
+  * Copyright (C) 2026 Yakov Khalinsky */
+-/* The port's screen and its controls.
++/* The port's screen and its controls: the UI's shell (UI-PLAN.md §3.2).
+  *
+  * The module has two encoders and four buttons and a 128 x 64 screen; the FM-1
+  * had seven encoders, fourteen buttons, a 27-note keyboard and a 240 x 240
+@@ -13,14 +13,22 @@
+  * the port's interface. So a generator's knobs are the same knobs the FM-1
+  * shows, with the same ranges and the same names.
+  *
+- * The top and the bottom buttons change the page, the left encoder's button
+- * starts and stops, the right one's is the row's own action.
++ * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, below
++ * the engine's tick) reads the six controls into a ring; the main loop drains
++ * it into the input core (parts/oc_ui_input.c), whose events go to the screen
++ * router (parts/oc_ui_nav.c), and the router's actions are applied here, to
++ * the engine, through the port. The screens: OVERVIEW (the old HOME), TRACK
++ * with the GEN, SCL, CV and MOD tabs, PERFORM (a stub until phase 5),
++ * PROJECT (the slots; the drive is read only), INFO (the timings) and the
++ * screen menu.
+  *
+  * The face is Tessera's 5 x 7 (the engine's mono_font.h). */
+ 
+ #include <Arduino.h>
+ #include "oc_port.h"
+ #include "oc_version.h"
++#include "../parts/oc_ui_input.h"
++#include "../parts/oc_ui_nav.h"
+ 
+ /* --- the display, the platform's side --- */
+ void oc_display_init(void);
+@@ -50,8 +58,9 @@ void oc_set_generator(uint32_t tr, int32_t mode);
+ int oc_save(uint32_t slot);
+ int oc_load(uint32_t slot);
+ int oc_slot_used(uint32_t slot);
++uint32_t oc_diag_blk_max_us(void);
+ 
+-/* --- the pages --- */
++/* --- the screens' rows --- */
+ /* A row is a parameter of the selected track, or one of the port's own. */
+ enum { ROW_TX, ROW_P, ROW_E, ROW_TEMPO, ROW_TRACK, ROW_CLOCK, ROW_SLOT };
+ struct UiRow {
+@@ -61,93 +70,74 @@ struct UiRow {
+ };
+ 
+ 
+-/* HOME: the tempo, the four tracks, the clock */
++/* OVERVIEW (HOME): the tempo, the four tracks, the clock */
+ static const UiRow PAGE_HOME[] = {
+     {ROW_TEMPO, 0, 0},
+     {ROW_TRACK, 0, 0}, {ROW_TRACK, 0, 1}, {ROW_TRACK, 0, 2}, {ROW_TRACK, 0, 3},
+     {ROW_CLOCK, 0, 0},
+ };
+ 
+-/* PROJ: the four slots the project is kept in */
++/* PROJECT: the four slots the project is kept in */
+ static const UiRow PAGE_PROJ[] = {
+     {ROW_SLOT, 0, 0}, {ROW_SLOT, 0, 1}, {ROW_SLOT, 0, 2}, {ROW_SLOT, 0, 3},
+ };
+ 
+-struct UiPage {
+-    const char *name;
+-    const UiRow *rows;
+-    uint8_t count;
+-    uint8_t gen_page;      /* 1: the rows come from the generator */
+-};
+-
+-static const UiPage PAGES[] = {
+-    {"HOME", PAGE_HOME, sizeof PAGE_HOME / sizeof PAGE_HOME[0], 0},
+-    {"GEN", 0, 0, 1},
+-    {"SCL", 0, 0, 2},
+-    {"CV", 0, 0, 3},
+-    {"MOD", 0, 0, 4},
+-    {"PROJ", PAGE_PROJ, sizeof PAGE_PROJ / sizeof PAGE_PROJ[0], 0},
+-};
+-
+-#define PAGE_COUNT (sizeof PAGES / sizeof PAGES[0])
+ #define UI_ROWS_MAX 16
+ 
+-static uint8_t ui_page, ui_row;
+ static UiRow ui_rows[UI_ROWS_MAX];
+ 
+-/* the page's rows: the generator's rows change with the generator, so they
+- * are built here */
+-static uint32_t ui_build_rows(void)
++static uint32_t ui_ids_rows(uint8_t kind, const uint8_t *ids, uint8_t count)
+ {
+-    const UiPage *p = &PAGES[ui_page];
+     uint32_t n = 0;
++    for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
++        ui_rows[n].kind = kind;
++        ui_rows[n].id = ids[i];
++        ui_rows[n].arg = 0;
++        n++;
++    }
++    return n;
++}
+ 
+-    if (p->gen_page) {
+-        const uint8_t *ids;
+-        uint8_t count = 0;
+-        if (p->gen_page == 1u) {
+-            ids = oc_gen_rows(oc_track_generator(oc_selected_track()), &count);
+-            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+-                ui_rows[n].kind = ROW_TX;
+-                ui_rows[n].id = ids[i];
+-                ui_rows[n].arg = 0;
+-                n++;
+-            }
+-        } else if (p->gen_page == 2u) {
+-            ids = oc_scl_rows(&count);
+-            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+-                ui_rows[n].kind = ROW_P;
+-                ui_rows[n].id = ids[i];
+-                ui_rows[n].arg = 0;
+-                n++;
+-            }
+-        } else if (p->gen_page == 3u) {
+-            ids = oc_cv_rows(&count);
+-            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+-                ui_rows[n].kind = ROW_E;
+-                ui_rows[n].id = ids[i];
+-                ui_rows[n].arg = 0;
+-                n++;
+-            }
+-        } else {
+-            ids = oc_mod_rows(&count);
+-            for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++) {
+-                ui_rows[n].kind = ROW_P;
+-                ui_rows[n].id = ids[i];
+-                ui_rows[n].arg = 0;
+-                n++;
+-            }
++/* a screen's rows: TRACK's come from the tab, and GEN's from the generator,
++ * so they are built each time */
++static uint32_t ui_build_rows(uint32_t screen, uint32_t tab)
++{
++    const UiRow *rows = 0;
++    uint32_t count = 0, n = 0;
++    const uint8_t *ids;
++    uint8_t c = 0;
++
++    if (screen == UI_SCR_TRACK) {
++        if (tab == UI_TAB_GEN) {
++            ids = oc_gen_rows(oc_track_generator(oc_selected_track()), &c);
++            return ui_ids_rows(ROW_TX, ids, c);
++        }
++        if (tab == UI_TAB_SCL) {
++            ids = oc_scl_rows(&c);
++            return ui_ids_rows(ROW_P, ids, c);
+         }
+-        return n;
++        if (tab == UI_TAB_CV) {
++            ids = oc_cv_rows(&c);
++            return ui_ids_rows(ROW_E, ids, c);
++        }
++        ids = oc_mod_rows(&c);
++        return ui_ids_rows(ROW_P, ids, c);
++    }
++    if (screen == UI_SCR_OVERVIEW) {
++        rows = PAGE_HOME;
++        count = sizeof PAGE_HOME / sizeof PAGE_HOME[0];
++    } else if (screen == UI_SCR_PROJECT) {
++        rows = PAGE_PROJ;
++        count = sizeof PAGE_PROJ / sizeof PAGE_PROJ[0];
+     }
+-    for (uint32_t i = 0; i < p->count && n < UI_ROWS_MAX; i++)
+-        ui_rows[n++] = p->rows[i];
++    for (uint32_t i = 0; i < count && n < UI_ROWS_MAX; i++)
++        ui_rows[n++] = rows[i];
+     return n;
+ }
+ 
+ /* --- the encoders --- */
+ /* The quadrature is the port's own (oc_port.h): the state table, the
+- * direction of a turn and how far it has gone. */
++ * direction of a turn and how far it has gone. The sampler runs it. */
+ struct Encoder {
+     uint8_t state;
+     int8_t acc;
+@@ -160,7 +150,12 @@ static Encoder enc_right = {0, 0, 0, 0};
+ static int32_t encoder_step(Encoder *e)
+ {
+     uint8_t state = (uint8_t)((digitalReadFast(e->pin_a) << 1) | digitalReadFast(e->pin_b));
+-    return oc_enc_step(&e->state, &e->acc, state);
++    int32_t steps = oc_enc_step(&e->state, &e->acc, state);
++    /* physical 21/22 shaft; cf. Phazerville ENCODER_CONFIG_L_REVERSED / OC_ui.cpp:70-71.
++     * Applied once, here, before the input core sees the detents. */
++    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(e->pin_a, e->pin_b))
++        steps = -steps;
++    return steps;
+ }
+ 
+ /* a copy, bounded: the engine's own str_cpy is not the platform's */
+@@ -256,100 +251,297 @@ static void ui_row_turn(const UiRow *row, int32_t steps)
+     }
+ }
+ 
++/* --- the sampler --- */
++/* The six controls, read at 1 kHz by a timer of their own (below the
++ * engine's tick, which keeps priority 80): the four buttons as a mask
++ * (UI_BTN_*, pressed = LOW) and the two encoders' detents, into a ring the
++ * main loop drains. The sampler starts only in normal mode (ui_start, from
++ * setup, next to the tick): the safe mode and the crash pager read the
++ * buttons themselves, as they always have. */
++#define UI_SAMPLE_US 1000u
++#define UI_SAMPLE_PRIORITY 160
++
++static IntervalTimer ui_timer;
++static ui_ring_t ui_ring;
++static ui_input_t ui_in;
++static ui_nav_t ui_nav;
++
++static uint8_t ui_buttons_now(void)
++{
++    uint8_t b = 0;
++    if (!digitalReadFast(oc_pins.but_l)) b |= UI_BTN_L;
++    if (!digitalReadFast(oc_pins.but_r)) b |= UI_BTN_R;
++    if (!digitalReadFast(oc_pins.but_top)) b |= UI_BTN_TOP;
++    if (!digitalReadFast(oc_pins.but_bot)) b |= UI_BTN_BOT;
++    return b;
++}
++
++static void ui_sample(void)
++{
++    int32_t dl = encoder_step(&enc_left);
++    int32_t dr = encoder_step(&enc_right);
++    ui_ring_put(&ui_ring, millis(), ui_buttons_now(), dl, dr);
++}
++
++/* --- the timings, for INFO (plain RAM: they start again at each boot) --- */
++static uint32_t ui_draw_us, ui_draw_max_us, ui_flush_us, ui_flush_max_us;
++static uint32_t ui_loop_max_us, ui_loop_last;
++
+ /* --- the screen --- */
+ static void draw_line(int32_t row, const char *s)
+ {
+     oc_display_text(0, row * 8, s);
+ }
+ 
+-void ui_draw(void)
++static const char *const TAB_NAME[UI_TAB_COUNT] = {"GEN", "SCL", "CV", "MOD"};
++static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRACK", "PROJECT", "INFO"};
++
++/* the footers: the controls each screen answers, in 21 characters or less
++ * (L/R: the encoders, LP/RP: their pushes, LL: a long LP, RB: the RIGHT
++ * button, BOTTOM in the code; LEFT and RIGHT are the panel's names) */
++static const char *ui_footer(uint32_t screen)
++{
++    switch (screen) {
++    case UI_SCR_OVERVIEW: return "L:ROW R:SET LL:MENU";
++    case UI_SCR_TRACK:    return "L:ROW R:SET RB+RP:TAB";
++    case UI_SCR_PERFORM:  return "LEFT+RIGHT:BACK";
++    case UI_SCR_PROJECT:  return "RP:LOAD LP:BACK";
++    case UI_SCR_MENU:     return "L:MOVE RP:OPEN";
++    default:              return "LP:BACK";
++    }
++}
++
++/* the list: a row per line, the cursor's row marked, scrolled so it stays on */
++static void draw_rows(uint32_t n, uint32_t cur)
+ {
+     char line[24], label[12], value[10];
+-    uint32_t n = ui_build_rows();
+-    uint32_t sel = oc_selected_track();
+-    int16_t bpm = oc_tempo();
+     uint32_t first = 0;
+-
+-    /* the list scrolls so the chosen row stays on the screen */
+-    if (ui_row >= 6u)
+-        first = ui_row - 5u;
++    if (cur >= 6u)
++        first = cur - 5u;
+     if (first + 6u > n)
+         first = n > 6u ? n - 6u : 0;
++    for (uint32_t i = 0; i < 6u && first + i < n; i++) {
++        uint32_t r = first + i;
++        ui_row_text(&ui_rows[r], label, value);
++        snprintf(line, sizeof line, "%c%-11s %s", r == cur ? '>' : ' ', label, value);
++        draw_line(1 + (int32_t)i, line);
++    }
++}
++
++static void draw_info(void)
++{
++    char line[24];
++    snprintf(line, sizeof line, "v%s", OC_VERSION_STRING);
++    draw_line(1, line);
++    snprintf(line, sizeof line, "BLK MAX %lu US", (unsigned long)oc_diag_blk_max_us());
++    draw_line(2, line);
++    snprintf(line, sizeof line, "DRAW %lu/%lu US", (unsigned long)ui_draw_us, (unsigned long)ui_draw_max_us);
++    draw_line(3, line);
++    snprintf(line, sizeof line, "FLUSH %lu/%lu US", (unsigned long)ui_flush_us, (unsigned long)ui_flush_max_us);
++    draw_line(4, line);
++    snprintf(line, sizeof line, "LOOP MAX %lu US", (unsigned long)ui_loop_max_us);
++    draw_line(5, line);
++    snprintf(line, sizeof line, "STORAGE %s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
++    draw_line(6, line);
++}
++
++static void draw_perform(void)
++{
++    char line[24];
++    for (uint32_t t = 0; t < 4u; t++) {
++        uint8_t gen = oc_track_generator(t);
++        snprintf(line, sizeof line, "T%u %s", (unsigned)(t + 1u), gen < 14u ? GEN_NAME[gen] : "?");
++        draw_line(1 + (int32_t)t, line);
++    }
++    draw_line(6, "MORE IN PHASE 5");
++}
++
++static void draw_menu(void)
++{
++    char line[24];
++    uint32_t cur = ui_nav.cursor[UI_SCR_MENU] % UI_MENU_ITEMS;
++    for (uint32_t i = 0; i < UI_MENU_ITEMS; i++) {
++        snprintf(line, sizeof line, "%c%s", i == cur ? '>' : ' ', MENU_NAME[i]);
++        draw_line(1 + (int32_t)i, line);
++    }
++}
++
++/* the rows of every screen, told to the router (its cursors are clamped) */
++static uint32_t ui_rows_for(uint32_t screen)
++{
++    uint32_t n = 0;
++    if (screen == UI_SCR_OVERVIEW || screen == UI_SCR_TRACK || screen == UI_SCR_PROJECT)
++        n = ui_build_rows(screen, ui_nav.tab);
++    if (screen != UI_SCR_MENU)
++        ui_nav_rows(&ui_nav, screen, n);
++    return n;
++}
++
++void ui_draw(void)
++{
++    char line[24];
++    uint32_t screen = ui_nav_screen(&ui_nav);
++    uint32_t t0 = micros(), t1;
++    uint32_t n = ui_rows_for(screen);
++    uint32_t cur = ui_nav.cursor[screen];
+ 
+     oc_display_clear();
+-    snprintf(line, sizeof line, "%-4s T%u %3d BPM", PAGES[ui_page].name, (unsigned)(sel + 1u), (int)bpm);
++    if (screen == UI_SCR_TRACK)
++        snprintf(line, sizeof line, "TRACK %s T%u %3d BPM", TAB_NAME[ui_nav.tab % UI_TAB_COUNT],
++                 (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
++    else if (screen == UI_SCR_OVERVIEW)
++        snprintf(line, sizeof line, "HOME T%u %3d BPM", (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
++    else
++        snprintf(line, sizeof line, "%s", screen == UI_SCR_PERFORM ? "PERFORM"
++                                          : screen == UI_SCR_PROJECT ? "PROJECT"
++                                          : screen == UI_SCR_INFO ? "INFO" : "MENU");
+     draw_line(0, line);
+ 
+-    /* The project page without a drive: there is no save (the drive is read
+-     * only), and the screen says so. */
+-    if (PAGES[ui_page].rows == PAGE_PROJ && !oc_storage_ok()) {
++    if (screen == UI_SCR_INFO)
++        draw_info();
++    else if (screen == UI_SCR_PERFORM)
++        draw_perform();
++    else if (screen == UI_SCR_MENU)
++        draw_menu();
++    else if (screen == UI_SCR_PROJECT && !oc_storage_ok()) {
++        /* the project screen without a drive: no load, and the screen says so */
+         snprintf(line, sizeof line, "SAVE OFF v%s", OC_VERSION);
+         draw_line(1, line);
+-        draw_line(7, "L:ROW R:VALUE T:PAGE");
+-        oc_display_flush();
+-        return;
+-    }
++    } else
++        draw_rows(n, cur);
++    draw_line(7, ui_footer(screen));
+ 
+-    for (uint32_t i = 0; i < 6u && first + i < n; i++) {
+-        uint32_t r = first + i;
+-        ui_row_text(&ui_rows[r], label, value);
+-        snprintf(line, sizeof line, "%c%-11s %s", r == ui_row ? '>' : ' ', label, value);
+-        draw_line(1 + (int32_t)i, line);
+-    }
+-    draw_line(7, "L:ROW R:VALUE T:PAGE");
++    t1 = micros();
+     oc_display_flush();
++    ui_draw_us = t1 - t0;
++    ui_flush_us = micros() - t1;
++    if (ui_draw_us > ui_draw_max_us) ui_draw_max_us = ui_draw_us;
++    if (ui_flush_us > ui_flush_max_us) ui_flush_max_us = ui_flush_us;
+ }
+ 
+-/* the controls: the encoders and the buttons
+- *
+- * The turn's direction is the sign of the steps, and the count is the size of
+- * it: a turn backwards is as many steps as a turn forwards, and the old loop
+- * (while (steps--)) never ended for a negative count - a turn the other way
+- * hung the module. */
+-void ui_input(void)
++/* --- the actions --- */
++/* a value turned: the turn's detents times the acceleration (a fine turn,
++ * an enum or a short range is one step a detent) */
++static int32_t ui_row_range(const UiRow *row, int *is_enum)
+ {
+-    uint32_t n = ui_build_rows();
+-    int32_t steps = encoder_step(&enc_left);
+-    /* physical 21/22 shaft; cf. Phazerville ENCODER_CONFIG_L_REVERSED / OC_ui.cpp:70-71 */
+-    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_left.pin_a, enc_left.pin_b))
+-        steps = -steps;
+-    int32_t dir = steps < 0 ? -1 : 1;
+-    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--) {
+-        /* the row moves the way the encoder turned, and wraps around */
+-        ui_row = oc_enc_row(ui_row, dir, n);
+-        /* a track row chooses the track the other pages work on */
+-        if (ui_rows[ui_row].kind == ROW_TRACK)
+-            oc_select_track(ui_rows[ui_row].arg);
++    const param_desc_t *d = 0;
++    *is_enum = 0;
++    switch (row->kind) {
++    case ROW_TEMPO: return 200;
++    case ROW_TRACK: *is_enum = 1; return 14;
++    case ROW_TX: d = oc_tx_desc(row->id); break;
++    case ROW_P: d = oc_track_desc(row->id); break;
++    case ROW_E: d = oc_engine_desc(row->id); break;
++    default: return 0;
+     }
+-
+-    steps = encoder_step(&enc_right);
+-    if (OC_ENC_REV_PINS_21_22 && oc_enc_on_21_22(enc_right.pin_a, enc_right.pin_b))
+-        steps = -steps;
+-    dir = steps < 0 ? -1 : 1;
+-    for (uint32_t k = steps < 0 ? (uint32_t)(-steps) : (uint32_t)steps; k > 0 && n; k--)
+-        ui_row_turn(&ui_rows[ui_row], dir);
++    if (!d)
++        return 0;
++    *is_enum = d->names != 0;
++    return (int32_t)d->max - (int32_t)d->min;
+ }
+ 
+-/* the buttons: the left encoder's and the right one's. On the project page they
+- * load and save the chosen slot; elsewhere the left one starts and stops. */
+-void ui_button(int32_t which)
++static void ui_row_default(const UiRow *row)
+ {
+-    if (PAGES[ui_page].rows == PAGE_PROJ) {
+-        uint32_t slot = ui_rows[ui_row].arg;
+-        if (which)
+-            oc_save(slot);                  /* the right one: save */
+-        else
+-            oc_load(slot);                  /* the left one: load */
++    uint32_t tr = oc_selected_track();
++    const param_desc_t *d;
++    switch (row->kind) {
++    case ROW_TX:
++        d = oc_tx_desc(row->id);
++        if (d) oc_tx_set(tr, row->id, d->def);
++        return;
++    case ROW_P:
++    case ROW_E:
++        d = row->kind == ROW_E ? oc_engine_desc(row->id) : oc_track_desc(row->id);
++        if (d) oc_track_param_set(tr, row->id, d->def);
++        return;
++    default:
+         return;
+     }
+-    if (!which)
++}
++
++static void ui_apply(const ui_action_t *a, uint32_t screen)
++{
++    uint32_t n = ui_rows_for(screen);
++    uint32_t cur = ui_nav.cursor[screen];
++    const UiRow *row = cur < n ? &ui_rows[cur] : 0;
++    int is_enum;
++    int32_t range;
++
++    switch (a->kind) {
++    case UI_ACT_PLAY_STOP:
+         oc_transport(oc_playing() ? 2u : 1u);
++        return;
++    case UI_ACT_RESTART:
++        oc_transport(3u);
++        return;
++    case UI_ACT_SELECT_TRACK:
++        oc_select_track((uint8_t)(((int32_t)oc_selected_track() + a->n % 4 + 4) % 4));
++        return;
++    case UI_ACT_TEMPO:
++        if (!oc_clock_following())     /* an external clock sets the tempo itself */
++            oc_set_tempo((int16_t)(oc_tempo() + a->n * ui_accel(a->dt, 200, 0, a->fine)));
++        return;
++    case UI_ACT_VALUE:
++        if (!row || screen == UI_SCR_PROJECT)
++            return;
++        range = ui_row_range(row, &is_enum);
++        if (range > 0)
++            ui_row_turn(row, a->n * ui_accel(a->dt, range, is_enum, a->fine));
++        return;
++    case UI_ACT_ENTER:
++        if (screen == UI_SCR_OVERVIEW && row && row->kind == ROW_TRACK)
++            ui_nav_open(&ui_nav, UI_SCR_TRACK);
++        else if (screen == UI_SCR_PROJECT && row && row->kind == ROW_SLOT && oc_storage_ok())
++            oc_load(row->arg);         /* the drive is read only: load, no save */
++        return;
++    case UI_ACT_CONTEXT:
++        if (screen == UI_SCR_TRACK && row)
++            ui_row_default(row);
++        return;
++    default:
++        return;                        /* SECONDARY, MACRO: phase 5 */
++    }
++}
++
++/* the main loop's side: the ring into the input core, its events into the
++ * router, the router's actions onto the engine */
++void ui_service(void)
++{
++    ui_sample_t s;
++    ui_event_t ev;
++    uint32_t now = micros();
++
++    if (ui_loop_last && millis() > 2000u && now - ui_loop_last > ui_loop_max_us)
++        ui_loop_max_us = now - ui_loop_last;
++    ui_loop_last = now;
++
++    while (ui_ring_get(&ui_ring, &s)) {
++        ui_in_buttons(&ui_in, s.buttons, s.ms);
++        ui_in_turn(&ui_in, 0, s.dl, s.ms);
++        ui_in_turn(&ui_in, 1, s.dr, s.ms);
++        while (ui_in_pop(&ui_in, &ev)) {
++            uint32_t screen = ui_nav_screen(&ui_nav);
++            ui_action_t a;
++            ui_rows_for(screen);
++            a = ui_nav_event(&ui_nav, &ev);
++            ui_apply(&a, screen);
++            /* OVERVIEW's cursor on a track row is the track the other screens edit */
++            screen = ui_nav_screen(&ui_nav);
++            if (screen == UI_SCR_OVERVIEW && ev.src == UI_SRC_ENC_L) {
++                uint32_t n = ui_rows_for(screen), cur = ui_nav.cursor[screen];
++                if (cur < n && ui_rows[cur].kind == ROW_TRACK)
++                    oc_select_track(ui_rows[cur].arg);
++            }
++        }
++    }
+ }
+ 
+-void ui_page_next(int32_t dir)
++/* the renderer's way in (tools/render_screens): a screen and a tab to draw */
++void ui_open(uint32_t screen, uint32_t tab)
+ {
+-    ui_page = (uint8_t)((ui_page + (uint8_t)(dir < 0 ? PAGE_COUNT - 1u : 1u)) % PAGE_COUNT);
+-    ui_row = 0;
++    ui_nav_init(&ui_nav);
++    ui_nav.tab = (uint8_t)(tab % UI_TAB_COUNT);
++    ui_nav_open(&ui_nav, screen);
+ }
+ 
+ void ui_init(void)
+@@ -362,4 +554,14 @@ void ui_init(void)
+         pinMode(p, INPUT_PULLUP);
+     enc_left.state = (uint8_t)((digitalReadFast(oc_pins.enc_l1) << 1) | digitalReadFast(oc_pins.enc_l2));
+     enc_right.state = (uint8_t)((digitalReadFast(oc_pins.enc_r1) << 1) | digitalReadFast(oc_pins.enc_r2));
++    ui_nav_init(&ui_nav);
++}
++
++/* normal mode only (setup, next to the tick): the buttons held through the
++ * boot are latched (they act only after a release), then the sampler runs */
++void ui_start(void)
++{
++    ui_in_init(&ui_in, ui_buttons_now(), millis());
++    ui_timer.begin(ui_sample, UI_SAMPLE_US);
++    ui_timer.priority(UI_SAMPLE_PRIORITY);
+ }
+diff --git a/firmware/oc_ui_parts.c b/firmware/oc_ui_parts.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..1c699b1ecbf07a05fba07c13189fad37b2e57163
+--- /dev/null
++++ b/firmware/oc_ui_parts.c
+@@ -0,0 +1,7 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * Copyright (C) 2026 Yakov Khalinsky */
++/* The UI's pure-C parts (parts/), built into the firmware as one unit, the way
++ * the engine is (firmware/oc_engine.c): the source directory is firmware/, and
++ * the host tests build the same files on their own (tools/build_host.sh). */
++#include "../parts/oc_ui_input.c"
++#include "../parts/oc_ui_nav.c"
+diff --git a/parts/oc_ui_nav.c b/parts/oc_ui_nav.c
+index da2c7eebba0a827e7083c62934df038b475a5c19..5b0915f124579ba8df7f8d81c874e41caf6cde76 100644
+--- a/parts/oc_ui_nav.c
++++ b/parts/oc_ui_nav.c
+@@ -50,6 +50,12 @@ static void nav_open(ui_nav_t *nav, uint8_t screen)
+     nav->stack[nav->depth - 1u] = screen;
+ }
+ 
++void ui_nav_open(ui_nav_t *nav, uint32_t screen)
++{
++    if (screen < UI_SCR_COUNT)
++        nav_open(nav, (uint8_t)screen);
++}
++
+ static void nav_back(ui_nav_t *nav)
+ {
+     if (nav->depth > 1u)                  /* BACK at the root does nothing */
+diff --git a/parts/oc_ui_nav.h b/parts/oc_ui_nav.h
+index f40a5ed43dcb9589043dd0afa921d423a8f299fb..01788602bf52d5d8ee84e44da9cc3df2708876d6 100644
+--- a/parts/oc_ui_nav.h
++++ b/parts/oc_ui_nav.h
+@@ -57,6 +57,10 @@ void ui_nav_rows(ui_nav_t *nav, uint32_t screen, uint32_t rows);
+ uint32_t ui_nav_screen(const ui_nav_t *nav);
+ /* one event in; the action for the shell out (UI_ACT_NONE: nothing to do) */
+ ui_action_t ui_nav_event(ui_nav_t *nav, const ui_event_t *ev);
++/* open a screen as the menu would (the shell's ENTER on OVERVIEW opens TRACK):
++ * OVERVIEW goes back to the root, the screen shown already stays, a full
++ * stack replaces its top */
++void ui_nav_open(ui_nav_t *nav, uint32_t screen);
+ /* the menu's items, in order: OVERVIEW, PERFORM, TRACK, PROJECT, INFO */
+ uint32_t ui_nav_menu_item(uint32_t index);
+ 
+diff --git a/tests/oc_ui_nav_test.c b/tests/oc_ui_nav_test.c
+index 8a0cf6c985e4184eb9834fd350e3782a8339115d..8e3705fd51cd3e3e3f416ce1a1fee06e0a63f842 100644
+--- a/tests/oc_ui_nav_test.c
++++ b/tests/oc_ui_nav_test.c
+@@ -238,6 +238,24 @@ static void check_rest(void)
+           ui_nav_menu_item(4) == UI_SCR_INFO && ui_nav_menu_item(9) == UI_SCR_OVERVIEW);
+ }
+ 
++/* the shell's own open (phase 1c: an R tap on a TRACK row of OVERVIEW opens TRACK) */
++static void check_open(void)
++{
++    ui_action_t a;
++    ui_nav_init(&nav);
++    ui_nav_open(&nav, UI_SCR_TRACK);
++    check("open: TRACK on top of OVERVIEW", at(UI_SCR_TRACK, 2));
++    ui_nav_open(&nav, UI_SCR_TRACK);
++    check("open: the screen shown already stays one deep", at(UI_SCR_TRACK, 2));
++    a = ev(UI_SRC_PUSH_L, UI_EV_TAP, 0, 0);
++    check("open: an L tap goes back to OVERVIEW", a.kind == UI_ACT_NONE && at(UI_SCR_OVERVIEW, 1));
++    ui_nav_open(&nav, UI_SCR_INFO);
++    ui_nav_open(&nav, UI_SCR_OVERVIEW);
++    check("open: OVERVIEW is the root again", at(UI_SCR_OVERVIEW, 1));
++    ui_nav_open(&nav, UI_SCR_COUNT);
++    check("open: a screen out of range does nothing", at(UI_SCR_OVERVIEW, 1));
++}
++
+ int main(void)
+ {
+     check_menu();
+@@ -247,6 +265,7 @@ int main(void)
+     check_track();
+     check_rows();
+     check_rest();
++    check_open();
+ 
+     printf("oc_nav: %d checks, %d failing\n", checks, failures);
+     return failures ? 1 : 0;
+diff --git a/tools/render_screens.sh b/tools/render_screens.sh
+index 2d8718b7e8a95c918eac872444694634b2dd34ee..c90e32c3e4fbff0c582144d91fa64debb89160a1 100755
+--- a/tools/render_screens.sh
++++ b/tools/render_screens.sh
+@@ -14,10 +14,11 @@ INC="-I$SRC -Ibuild/gen -Ifirmware -Ivendor/tessera/firmware/src"
+ mkdir -p "$OUT"
+ [ -f build/gen/melodee_tables.h ] || tools/build_host.sh build >/dev/null
+ cc -O2 -w $INC -c -o "$OUT/rs_engine.o" "$SRC/rs_engine.c"
++cc -O2 -w $INC -c -o "$OUT/oc_ui_parts.o" firmware/oc_ui_parts.c
+ for f in oc_display oc_ui oc_diag; do
+     c++ -O2 -w -DOC_VERSION_EXTRA='"_T40"' -DOC_ENC_REV_PINS_21_22=1 $INC -c -o "$OUT/$f.o" "firmware/$f.cpp"
+ done
+ c++ -O2 -Wall -Wextra -DOC_VERSION_EXTRA='"_T40"' -DOC_ENC_REV_PINS_21_22=1 $INC -o "$OUT/render_screens" "$SRC/rs_main.cpp" \
+-    "$OUT/rs_engine.o" "$OUT/oc_display.o" "$OUT/oc_ui.o" "$OUT/oc_diag.o"
++    "$OUT/rs_engine.o" "$OUT/oc_display.o" "$OUT/oc_ui.o" "$OUT/oc_diag.o" "$OUT/oc_ui_parts.o"
+ mkdir -p "${1:-docs/img}"
+ exec "$OUT/render_screens" "${1:-docs/img}"
+diff --git a/tools/render_screens/Arduino.h b/tools/render_screens/Arduino.h
+index 5f0afe1a25ab7a9cc9e9e15ca5522046df2d1997..54230ed297a3224ed151f699595fdd30179c7266 100644
+--- a/tools/render_screens/Arduino.h
++++ b/tools/render_screens/Arduino.h
+@@ -32,6 +32,15 @@ static inline uint8_t digitalRead(uint8_t pin) { return rs_pin_read(pin); }
+ static inline uint8_t digitalReadFast(uint8_t pin) { return rs_pin_read(pin); }
+ static inline void delay(uint32_t ms) { (void)ms; }
+ static inline uint32_t millis(void) { return 0; }
++static inline uint32_t micros(void) { return 0; }   /* INFO's timings read 0 */
++
++/* the UI's 1 kHz sampler: never started on the host (ui_start is setup's) */
++class IntervalTimer {
++public:
++    bool begin(void (*fn)(void), uint32_t us) { (void)fn; (void)us; return true; }
++    void priority(uint8_t p) { (void)p; }
++    void end(void) {}
++};
+ static inline void arm_dcache_flush(void *p, uint32_t n) { (void)p; (void)n; }
+ 
+ /* Print, as the framework has it: the crash report prints into one */
+diff --git a/tools/render_screens/rs_main.cpp b/tools/render_screens/rs_main.cpp
+index 195a80a0e271a3695b4e9af7e499406ba59569e4..29f78a40632a77161fcae6f85e4a2fdcc83e24b4 100644
+--- a/tools/render_screens/rs_main.cpp
++++ b/tools/render_screens/rs_main.cpp
+@@ -21,12 +21,14 @@
+ #include <string.h>
+ #include <sys/mman.h>
+ #include "oc_port.h"
++#include "../../parts/oc_ui_nav.h"
+ 
+ /* the screen code's entry points (declared in the firmware's own files) */
+ void oc_display_init(void);
+ void oc_display_splash(void);
+ void ui_init(void);
+ void ui_draw(void);
++void ui_open(uint32_t screen, uint32_t tab);   /* oc_ui.cpp: the renderer's way in */
+ 
+ /* ---------------------------------------------- what the platform owns --- */
+ /* oc_platform.cpp's globals and functions that the screen code reads; the
+@@ -261,6 +263,25 @@ int main(int argc, char **argv)
+     ui_draw();
+     failed |= save_png(out_dir, "screen-home.png");
+ 
++    /* the shell's other screens (phase 1c), opened as the router opens them:
++     * the screen menu, TRACK on its GEN tab (track 1), PERFORM, PROJECT and
++     * INFO (the timings read 0 on the host) */
++    ui_open(UI_SCR_MENU, 0);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-menu.png");
++    ui_open(UI_SCR_TRACK, UI_TAB_GEN);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-track.png");
++    ui_open(UI_SCR_PERFORM, 0);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-perform.png");
++    ui_open(UI_SCR_PROJECT, 0);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-project.png");
++    ui_open(UI_SCR_INFO, 0);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-info.png");
++
+     /* the safe mode: a warm boot after a run that got to the end (stage 23) */
+     oc_diag_begin();
+     oc_stage(23);

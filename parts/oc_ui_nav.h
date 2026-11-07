@@ -57,6 +57,10 @@ void ui_nav_rows(ui_nav_t *nav, uint32_t screen, uint32_t rows);
 uint32_t ui_nav_screen(const ui_nav_t *nav);
 /* one event in; the action for the shell out (UI_ACT_NONE: nothing to do) */
 ui_action_t ui_nav_event(ui_nav_t *nav, const ui_event_t *ev);
+/* open a screen as the menu would (the shell's ENTER on OVERVIEW opens TRACK):
+ * OVERVIEW goes back to the root, the screen shown already stays, a full
+ * stack replaces its top */
+void ui_nav_open(ui_nav_t *nav, uint32_t screen);
 /* the menu's items, in order: OVERVIEW, PERFORM, TRACK, PROJECT, INFO */
 uint32_t ui_nav_menu_item(uint32_t index);
 

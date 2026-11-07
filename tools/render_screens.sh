@@ -14,10 +14,11 @@ INC="-I$SRC -Ibuild/gen -Ifirmware -Ivendor/tessera/firmware/src"
 mkdir -p "$OUT"
 [ -f build/gen/melodee_tables.h ] || tools/build_host.sh build >/dev/null
 cc -O2 -w $INC -c -o "$OUT/rs_engine.o" "$SRC/rs_engine.c"
+cc -O2 -w $INC -c -o "$OUT/oc_ui_parts.o" firmware/oc_ui_parts.c
 for f in oc_display oc_ui oc_diag; do
     c++ -O2 -w -DOC_VERSION_EXTRA='"_T40"' -DOC_ENC_REV_PINS_21_22=1 $INC -c -o "$OUT/$f.o" "firmware/$f.cpp"
 done
 c++ -O2 -Wall -Wextra -DOC_VERSION_EXTRA='"_T40"' -DOC_ENC_REV_PINS_21_22=1 $INC -o "$OUT/render_screens" "$SRC/rs_main.cpp" \
-    "$OUT/rs_engine.o" "$OUT/oc_display.o" "$OUT/oc_ui.o" "$OUT/oc_diag.o"
+    "$OUT/rs_engine.o" "$OUT/oc_display.o" "$OUT/oc_ui.o" "$OUT/oc_diag.o" "$OUT/oc_ui_parts.o"
 mkdir -p "${1:-docs/img}"
 exec "$OUT/render_screens" "${1:-docs/img}"
