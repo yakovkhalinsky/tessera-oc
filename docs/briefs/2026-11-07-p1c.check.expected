@@ -1,0 +1,76 @@
+BUILD_HOST_EXIT=0
+render_screens: docs/img current
+oc_port: 41 checks, 0 failing
+oc_ui: 51 checks, 0 failing
+oc_nav: 47 checks, 0 failing
+0
+PIO_EXIT=0
+teensy_size:   FLASH: code:119672, data:67460, headers:8448   free for files:1836036
+teensy_size:    RAM1: variables:162496, code:114408, padding:16664   free for local variables:230720
+teensy_size:    RAM2: variables:17568  free for malloc/new:506720
+SECTIONS_EXIT=0
+  the map is sound: nothing between _edata and _sbss, no orphan RAM
+the drive is opened for reading and nothing else
+READ_ONLY_EXIT=0
+WRITE_PATH_EXIT=0
+firmware/oc_platform.cpp:0
+firmware/oc_ui.cpp:0
+2
+1
+711c87c91c04e36333b55c19c509e93f  firmware/oc_ui.cpp
+d9a921c8677dc85f9fb754c0ac60dd79  firmware/oc_platform.cpp
+bbb5d3008f086f8485c99013c53d2880  firmware/oc_diag.cpp
+f8686c4849974552e887c2e7363eec3d  firmware/oc_ui_parts.c
+4b4bab59ab7172aac1727a3c3a6e5d1f  parts/oc_ui_nav.c
+801c25d3dfd10ba013ec30b613c54e42  parts/oc_ui_nav.h
+10842842d48debe18817c45b731d18d9  tests/oc_ui_nav_test.c
+b9938e0b60cb811f1cccaa7aac6a0687  tools/render_screens.sh
+aac4439ed81e224d349f4cf6d0b05f1d  tools/render_screens/Arduino.h
+0497cb88e76f8338f43626e3606e42db  tools/render_screens/rs_main.cpp
+1313cf7d2a69944022d74116623ef38a  docs/GUIDE.md
+e1179f16e8b9539939999ed180721c2b  README.md
+d22ea17f1c86b384982cee2c0cf8b958  CHANGELOG.md
+153c57c2144eb17598036b986a923eef  docs/img/screen-crash-1.png
+ce96c4d3977b3220b24b7b6d5853ae4d  docs/img/screen-crash-2.png
+7b87baf941aff6331c5cafdbfd4cc65b  docs/img/screen-home.png
+9657134b8a8925dce99190f4901dfa10  docs/img/screen-info.png
+4bd58a06f15bf9b4ee80095646906c53  docs/img/screen-menu.png
+4c16cafb2c13381b7f06f3127065bf88  docs/img/screen-perform.png
+e5e7c3e891ca8276638df351b9719146  docs/img/screen-project.png
+ed414c32883f49ef3bcfebbcc0db7de3  docs/img/screen-reset.png
+d8de9abb18daa439509001af647fbb54  docs/img/screen-safe-mode.png
+69c299e94492cb9f9818ba6fd6b54ed4  docs/img/screen-splash.png
+92b96540ac564d0e107390416980ad87  docs/img/screen-track.png
+PINNED_UNCHANGED_EXIT=0
+6	0	CHANGELOG.md
+3	2	README.md
+77	38	docs/GUIDE.md
+-	-	docs/img/screen-home.png
+3	0	firmware/oc_diag.cpp
+7	32	firmware/oc_platform.cpp
+332	130	firmware/oc_ui.cpp
+6	0	parts/oc_ui_nav.c
+4	0	parts/oc_ui_nav.h
+19	0	tests/oc_ui_nav_test.c
+2	1	tools/render_screens.sh
+9	0	tools/render_screens/Arduino.h
+21	0	tools/render_screens/rs_main.cpp
+ M CHANGELOG.md
+ M README.md
+ M docs/GUIDE.md
+ M docs/img/screen-home.png
+ M firmware/oc_diag.cpp
+ M firmware/oc_platform.cpp
+ M firmware/oc_ui.cpp
+ M parts/oc_ui_nav.c
+ M parts/oc_ui_nav.h
+ M tests/oc_ui_nav_test.c
+ M tools/render_screens.sh
+ M tools/render_screens/Arduino.h
+ M tools/render_screens/rs_main.cpp
+?? docs/img/screen-info.png
+?? docs/img/screen-menu.png
+?? docs/img/screen-perform.png
+?? docs/img/screen-project.png
+?? docs/img/screen-track.png
+?? firmware/oc_ui_parts.c
