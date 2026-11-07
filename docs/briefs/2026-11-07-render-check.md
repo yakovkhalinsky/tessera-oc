@@ -2,7 +2,7 @@
 > **Archived job brief: render-check** (the render check both ways, orphan PNG test, Linux-only skip, save_png frees). Run on 2026-11-07 in Claude Code; this is the brief as run, with build-host-only paths replaced. Result: PR #7, merged (`947ad82`; branch head `fa6a791`).
 > The commands below were for that moment (base commits, expected outputs); to redo the work, read `docs/STATUS.md` first and branch from today's `main`.
 >
-> **Repo rules (apply to every job):** work on the job branch named below and push only that branch, with an explicit refspec; pull requests are **drafts** only; never merge, mark ready, tag or release (Yakov merges, with merge commits); never flash, upload or reflash hardware, and never with a Teensy attached to the build host (pizzabox), since only Yakov flashes, on his own computer; storage stays read-only; no engine changes; commit as `Yakov <646086+yakovkhalinsky@users.noreply.github.com>` with no trailers; never probe credentials. See `CLAUDE.md`.
+> **Repo rules (apply to every job):** work on the job branch named below and push only that branch, with an explicit refspec; pull requests are **drafts** only; never merge, mark ready, tag or release (Yakov merges, with merge commits); never flash, upload or reflash hardware, and never with a Teensy attached to the build host, since only Yakov flashes, on his own computer; storage stays read-only; no engine changes; commit as `Yakov <646086+yakovkhalinsky@users.noreply.github.com>` with no trailers; never probe credentials. See `CLAUDE.md`.
 
 # Claude Code job tessera-render-check-1: the render check, both ways (tight brief)
 
