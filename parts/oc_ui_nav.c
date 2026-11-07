@@ -50,6 +50,12 @@ static void nav_open(ui_nav_t *nav, uint8_t screen)
     nav->stack[nav->depth - 1u] = screen;
 }
 
+void ui_nav_open(ui_nav_t *nav, uint32_t screen)
+{
+    if (screen < UI_SCR_COUNT)
+        nav_open(nav, (uint8_t)screen);
+}
+
 static void nav_back(ui_nav_t *nav)
 {
     if (nav->depth > 1u)                  /* BACK at the root does nothing */

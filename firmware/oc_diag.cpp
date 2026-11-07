@@ -108,6 +108,9 @@ static uint32_t oc_us(uint32_t cycles)
 
 uint32_t oc_diag_cyccnt(void) { return OC_DWT_CYCCNT; }
 
+/* the longest engine block, in microseconds, for the UI's INFO screen (read only) */
+uint32_t oc_diag_blk_max_us(void) { return oc_us(oc_persist.blk_max_cyc); }
+
 /* the engine's block: the longest one */
 void oc_diag_block(uint32_t cycles)
 {

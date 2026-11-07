@@ -469,35 +469,16 @@ static void oc_tick(void)
     oc_clock_out(n);
 }
 
-/* The buttons: the top one starts and stops the transport, the bottom one
- * restarts it from the top. The encoders and the display come with the UI
- * (Phase 4). */
-#define BUT_TOP 1u
-#define BUT_BOT 2u
-#define BUT_L 4u
-#define BUT_R 8u
-static uint8_t oc_button_prev;
-
-static uint8_t oc_buttons_edges(void)
-{
-    uint8_t now = 0, edges;
-    if (!digitalRead(oc_pins.but_top)) now |= BUT_TOP;
-    if (!digitalRead(oc_pins.but_bot)) now |= BUT_BOT;
-    if (!digitalRead(oc_pins.but_l)) now |= BUT_L;
-    if (!digitalRead(oc_pins.but_r)) now |= BUT_R;
-    edges = now & ~oc_button_prev;             /* only the edges */
-    oc_button_prev = now;
-    return edges;
-}
-
 /* the screen and its controls */
 void oc_display_init(void);
 void oc_display_splash(void);
+/* The UI (oc_ui.cpp): the buttons and the encoders are its own now (phase
+ * 1c). ui_start runs its 1 kHz sampler, ui_service drains it: the top button
+ * starts and stops, the bottom one restarts, the rest is the screens'. */
 void ui_init(void);
-void ui_input(void);
+void ui_start(void);
+void ui_service(void);
 void ui_draw(void);
-void ui_page_next(int32_t dir);
-void ui_button(int32_t which);
 
 /* the safe mode: the bottom button held at power-on. Either of the two
  * buttons that can be the bottom one (pins 4 and 5) is accepted: the flag
@@ -604,6 +585,7 @@ void setup(void)
     if (!oc_safe_mode) {
         oc_timer.begin(oc_tick, OC_TICK_US);
         oc_timer.priority(80);
+        ui_start();                       /* the controls' sampler, below the tick */
     }
     oc_stage(22);
     oc_stage(23);
@@ -613,7 +595,6 @@ void loop(void)
 {
     static uint32_t last_draw;
     static uint32_t loops;
-    uint8_t buttons;
     bool diag = loops < 100u;               /* the first 100 iterations are
                                              * reported, step by step */
 
@@ -623,12 +604,6 @@ void loop(void)
         if (millis() - last_draw >= 250u) { last_draw = millis(); oc_diag_safe(); }
         return;
     }
-
-    buttons = oc_buttons_edges();
-    if (buttons & BUT_TOP)
-        oc_transport(oc_playing() ? 2u : 1u);    /* stop, or start */
-    if (buttons & BUT_BOT)
-        oc_transport(3u);                      /* restart from the top */
 
     /* the module's USB MIDI: the keys, the controllers and the clock. The
      * packet is the USB-MIDI one - the cable, the status, the two data bytes -
@@ -641,7 +616,7 @@ void loop(void)
         oc_midi_in(pkt);
     }
 
-    ui_input();
+    ui_service();                                /* the controls: the sampler's ring */
     if (millis() - last_draw >= 100u) {          /* ten screens a second */
         last_draw = millis();
         ui_draw();

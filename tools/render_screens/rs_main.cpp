@@ -21,12 +21,14 @@
 #include <string.h>
 #include <sys/mman.h>
 #include "oc_port.h"
+#include "../../parts/oc_ui_nav.h"
 
 /* the screen code's entry points (declared in the firmware's own files) */
 void oc_display_init(void);
 void oc_display_splash(void);
 void ui_init(void);
 void ui_draw(void);
+void ui_open(uint32_t screen, uint32_t tab);   /* oc_ui.cpp: the renderer's way in */
 
 /* ---------------------------------------------- what the platform owns --- */
 /* oc_platform.cpp's globals and functions that the screen code reads; the
@@ -260,6 +262,25 @@ int main(int argc, char **argv)
     ui_init();
     ui_draw();
     failed |= save_png(out_dir, "screen-home.png");
+
+    /* the shell's other screens (phase 1c), opened as the router opens them:
+     * the screen menu, TRACK on its GEN tab (track 1), PERFORM, PROJECT and
+     * INFO (the timings read 0 on the host) */
+    ui_open(UI_SCR_MENU, 0);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-menu.png");
+    ui_open(UI_SCR_TRACK, UI_TAB_GEN);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-track.png");
+    ui_open(UI_SCR_PERFORM, 0);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-perform.png");
+    ui_open(UI_SCR_PROJECT, 0);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-project.png");
+    ui_open(UI_SCR_INFO, 0);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-info.png");
 
     /* the safe mode: a warm boot after a run that got to the end (stage 23) */
     oc_diag_begin();

@@ -32,6 +32,15 @@ static inline uint8_t digitalRead(uint8_t pin) { return rs_pin_read(pin); }
 static inline uint8_t digitalReadFast(uint8_t pin) { return rs_pin_read(pin); }
 static inline void delay(uint32_t ms) { (void)ms; }
 static inline uint32_t millis(void) { return 0; }
+static inline uint32_t micros(void) { return 0; }   /* INFO's timings read 0 */
+
+/* the UI's 1 kHz sampler: never started on the host (ui_start is setup's) */
+class IntervalTimer {
+public:
+    bool begin(void (*fn)(void), uint32_t us) { (void)fn; (void)us; return true; }
+    void priority(uint8_t p) { (void)p; }
+    void end(void) {}
+};
 static inline void arm_dcache_flush(void *p, uint32_t n) { (void)p; (void)n; }
 
 /* Print, as the framework has it: the crash report prints into one */

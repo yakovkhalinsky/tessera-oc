@@ -238,6 +238,24 @@ static void check_rest(void)
           ui_nav_menu_item(4) == UI_SCR_INFO && ui_nav_menu_item(9) == UI_SCR_OVERVIEW);
 }
 
+/* the shell's own open (phase 1c: an R tap on a TRACK row of OVERVIEW opens TRACK) */
+static void check_open(void)
+{
+    ui_action_t a;
+    ui_nav_init(&nav);
+    ui_nav_open(&nav, UI_SCR_TRACK);
+    check("open: TRACK on top of OVERVIEW", at(UI_SCR_TRACK, 2));
+    ui_nav_open(&nav, UI_SCR_TRACK);
+    check("open: the screen shown already stays one deep", at(UI_SCR_TRACK, 2));
+    a = ev(UI_SRC_PUSH_L, UI_EV_TAP, 0, 0);
+    check("open: an L tap goes back to OVERVIEW", a.kind == UI_ACT_NONE && at(UI_SCR_OVERVIEW, 1));
+    ui_nav_open(&nav, UI_SCR_INFO);
+    ui_nav_open(&nav, UI_SCR_OVERVIEW);
+    check("open: OVERVIEW is the root again", at(UI_SCR_OVERVIEW, 1));
+    ui_nav_open(&nav, UI_SCR_COUNT);
+    check("open: a screen out of range does nothing", at(UI_SCR_OVERVIEW, 1));
+}
+
 int main(void)
 {
     check_menu();
@@ -247,6 +265,7 @@ int main(void)
     check_track();
     check_rows();
     check_rest();
+    check_open();
 
     printf("oc_nav: %d checks, %d failing\n", checks, failures);
     return failures ? 1 : 0;
