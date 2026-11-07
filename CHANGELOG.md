@@ -3,6 +3,11 @@
 The port's releases. The version is the one the firmware carries
 (`firmware/oc_version.h`); the splash on the module's screen shows it.
 
+## Unreleased
+
+### UI, phase 1a: the input core (no change on the module yet)
+- `parts/oc_ui_input.c`: the buttons and encoders as events (5 ms debounce, tap ≤ 400 ms, hold from 400 ms, long at 600 ms, BOTTOM as shift (each event says whether BOTTOM is held), TOP + BOTTOM chord within `UI_CHORD_MS` = 40 ms either way round, boot-latched buttons ignored until released, value acceleration) and the 1 kHz sampler's ring. Host-tested in `tests/oc_ui_test.c`; not wired into the firmware until phase 1b. Plan: `docs/UI-PLAN.md`.
+
 ## v0.1.2 — UNTESTED ON HARDWARE until Yakov confirms
 
 v0.1.1 fixed the bootloop but faulted in the engine's `pattern_init()`, in a
