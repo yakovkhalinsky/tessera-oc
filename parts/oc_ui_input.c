@@ -203,8 +203,10 @@ void ui_ring_put(ui_ring_t *r, uint32_t ms, uint8_t buttons, int32_t dl, int32_t
     ui_sample_t *e;
     r->carry_l += dl;
     r->carry_r += dr;
-    if ((uint8_t)(h - r->tail) >= UI_RING)
-        return;                       /* full: the detents wait in the carry */
+    if ((uint8_t)(h - r->tail) >= UI_RING) {
+        r->dropped++;                 /* full: counted; the detents wait in the carry */
+        return;
+    }
     e = &r->buf[h & (UI_RING - 1u)];
     e->ms = ms;
     e->buttons = buttons;
