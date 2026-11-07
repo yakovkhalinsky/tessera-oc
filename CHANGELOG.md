@@ -7,6 +7,7 @@ The port's releases. The version is the one the firmware carries
 
 ### Docs: the panel and controls guide
 - `docs/GUIDE.md` (linked from the README): the uO_C rev A panel (`docs/img/panel.svg`), the controls on each screen as they are on `main`, the power-on, the safe mode and the crash pager. The screen pictures (`docs/img/screen-*.png`) are drawn by the firmware's own screen code on the host (`tools/render_screens.sh`, `tools/render_screens/`), and CI fails if they are stale (a screen that differs, is missing or is left over; the check is skipped, with a message, off Linux).
+- The panel drawing and the controls tables follow the real panel: the LEFT and RIGHT buttons side by side under the display, above the encoders. The code calls them TOP and BOTTOM; LEFT is play / stop as calibrated (the FLIPCONTROLS flag picks the pinout).
 
 ### UI, phase 1a: the input core (no change on the module yet)
 - `parts/oc_ui_input.c`: the buttons and encoders as events (5 ms debounce, tap ≤ 400 ms, hold from 400 ms, long at 600 ms, BOTTOM as shift (each event says whether BOTTOM is held), TOP + BOTTOM chord within `UI_CHORD_MS` = 40 ms either way round, boot-latched buttons ignored until released, value acceleration) and the 1 kHz sampler's ring. Host-tested in `tests/oc_ui_test.c`; not wired into the firmware until phase 1b. Plan: `docs/UI-PLAN.md`.
