@@ -137,8 +137,10 @@ static int save_png(const char *dir, const char *name)
     char path[512];
     FILE *f;
 
-    if (!raw || !z)
+    if (!raw || !z) {
+        free(raw); free(z);
         return 1;
+    }
     for (uint32_t y = 0; y < ph; y++) {
         raw[y * stride] = 0;                          /* the filter: none */
         for (uint32_t x = 0; x < pw; x++)
@@ -169,8 +171,10 @@ static int save_png(const char *dir, const char *name)
     ihdr[10] = ihdr[11] = ihdr[12] = 0;
     snprintf(path, sizeof path, "%s/%s", dir, name);
     f = fopen(path, "wb");
-    if (!f)
+    if (!f) {
+        free(raw); free(z);
         return 1;
+    }
     fwrite(SIG, 1, 8, f);
     chunk(f, "IHDR", ihdr, 13);
     chunk(f, "IDAT", z, zn);

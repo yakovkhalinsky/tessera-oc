@@ -21,10 +21,18 @@ mkdir -p "$GEN" "$OUT"
 [ -f "$GEN/x0x_drum_tables.h" ]   || "$PY" "$TESSERA/tools/gen_909_tables.py" "$GEN/x0x_drum_tables.h" >/dev/null
 [ -f "$GEN/melodee_fm6.h" ]       || "$PY" "$TESSERA/tools/gen_fm6_patches.py" "$GEN/melodee_fm6.h" >/dev/null
 
-# the guide's screens (docs/GUIDE.md): docs/img must be what the screen code draws now
-if [ "$1" != build ]; then
+# the guide's screens (docs/GUIDE.md): docs/img must be what the screen code draws now,
+# the same screen files both ways and the same bytes (the renderer runs on Linux only)
+if [ "$1" != build ] && [ "$(uname -s)" != Linux ]; then
+    echo "render_screens: check skipped (the renderer runs on Linux only)"
+elif [ "$1" != build ]; then
+    rm -rf build/render_check
     tools/render_screens.sh build/render_check >/dev/null
+    for f in docs/img/screen-*.png; do
+        [ -f "build/render_check/${f##*/}" ] || { echo "docs/img stale: run tools/render_screens.sh (${f##*/} is committed but not rendered)" >&2; exit 1; }
+    done
     for f in build/render_check/screen-*.png; do
+        [ -f "docs/img/${f##*/}" ] || { echo "docs/img stale: run tools/render_screens.sh (${f##*/} is rendered but not committed)" >&2; exit 1; }
         cmp -s "$f" "docs/img/${f##*/}" || { echo "docs/img stale: run tools/render_screens.sh (${f##*/} differs)" >&2; exit 1; }
     done
     echo "render_screens: docs/img current"
