@@ -117,10 +117,15 @@ firmware/            the port: the o_C engine
   oc_spi.h             the SPI bus the DAC and the OLED share
   oc_version.h         the release the firmware carries
   oc_imxrt1062.ld      the port's memory map (the engine's .pool and .noinit in .bss)
+parts/               the UI's pure-C parts (host-tested; not on the module yet)
+  oc_ui_input.c        the buttons and the encoders as events
+  oc_ui_nav.c          the screen router: the stack, the cursors, the control map
 tests/               the port's tests
   oc_engine_test.c     the FM-1's generator test with the engine swapped for the port's
   oc_hostsim.c         the host environment (the port's engine, the block driver, the sinks)
   oc_port_test.c       the port's own: the module's pin map and the encoders' quadrature
+  oc_ui_test.c         the UI's input core
+  oc_ui_nav_test.c     the UI's screen router
 tools/               the build scripts
   build_host.sh        the host build and the generator test
   check_sections.py    the memory map's check (no orphan RAM, nothing unwritten)

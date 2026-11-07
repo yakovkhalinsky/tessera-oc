@@ -37,13 +37,15 @@ typedef struct {
     int16_t n;        /* TURN / SHIFT_TURN: detents, signed */
     uint16_t dt;      /* TURN: ms since this encoder's previous detent (65535 = long ago) */
     uint8_t fine;     /* TURN: that encoder's push is held (accel off) */
-    uint8_t shift;    /* BOTTOM is held (0 on BOT and CHORD_TB events) */
+    uint8_t shift;    /* BOTTOM held: at the press for a button's events, now for turns
+                       * (0 on BOT and CHORD_TB events) */
 } ui_event_t;
 
 #define UI_EVQ 16u    /* a power of two */
 
 typedef struct {
     uint8_t raw, stable, latched, used, long_done, hold_done;
+    uint8_t shift_at_press;       /* per button: BOTTOM was held when it went down */
     uint8_t cnt[4];               /* debounce: equal samples seen, per button */
     uint32_t down_ms[4];          /* when each button went down (stable) */
     uint32_t last_turn_ms[2];
