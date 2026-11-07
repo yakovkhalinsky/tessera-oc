@@ -418,7 +418,7 @@ storage PR. MIDI out. Engine changes. VOR/Plum variants. Pin remaps. Calibration
 
 ## 8. Open questions for Yakov
 
-1. **Buttons:** keep LEFT (TOP) = play/stop and RIGHT (BOTTOM) = restart (and RIGHT doubling as SHIFT, firing restart only on a clean tap)? And for the LEFT + RIGHT → PERFORM chord: delay LEFT by ≤ 40 ms, or keep LEFT instant and make the chord "hold TOP, press BOTTOM"?
+1. **Buttons:** keep LEFT (TOP) = play/stop and RIGHT (BOTTOM) = restart (and RIGHT doubling as SHIFT, firing restart only on a clean tap)? And for the LEFT + RIGHT → PERFORM chord: delay LEFT by ≤ 40 ms, or keep LEFT instant and make the chord "hold LEFT, press RIGHT"?
 2. **Fill:** what should FILL mean? Proposed: while held, density to 100 % (optionally ratchets ×2), then restore. Alternatives: ENERGY LEVEL up, or a one-bar fill.
 3. **CV inputs:** the firmware doesn't read the 4 CV ins at all today. Is outputs-only readout fine for now, or do you want phase 5b (reading CV ins: needs a pin-map check and review)?
 4. **Power-on screen:** OVERVIEW (proposed) or PERFORM?

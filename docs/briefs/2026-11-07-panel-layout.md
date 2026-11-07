@@ -4,7 +4,7 @@ This brief is committed in the repo as `docs/briefs/2026-11-07-panel-layout.md`,
 
 ## Repo rules (always)
 * Pull requests are **drafts** only, and this job opens none. Never merge, mark ready, tag or release; Yakov merges, with merge commits.
-* Never flash, upload or reflash hardware, and never with a Teensy attached to the build host (pizzabox). Only Yakov flashes, on his own computer.
+* Never flash, upload or reflash hardware, and never with a Teensy attached to the build host. Only Yakov flashes, on his own computer.
 * Push only the job branch, `docs/panel-layout-2`, and only as `git push origin HEAD:docs/panel-layout-2`. Never push to `main`, never force-push.
 * Commits are Yakov's (the identity is set for you; do not run `git config`), with no trailer of any kind.
 * Storage stays read-only and the engine is not touched; this job is docs only.
