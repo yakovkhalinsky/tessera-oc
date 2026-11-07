@@ -21,6 +21,15 @@ mkdir -p "$GEN" "$OUT"
 [ -f "$GEN/x0x_drum_tables.h" ]   || "$PY" "$TESSERA/tools/gen_909_tables.py" "$GEN/x0x_drum_tables.h" >/dev/null
 [ -f "$GEN/melodee_fm6.h" ]       || "$PY" "$TESSERA/tools/gen_fm6_patches.py" "$GEN/melodee_fm6.h" >/dev/null
 
+# the guide's screens (docs/GUIDE.md): docs/img must be what the screen code draws now
+if [ "$1" != build ]; then
+    tools/render_screens.sh build/render_check >/dev/null
+    for f in build/render_check/screen-*.png; do
+        cmp -s "$f" "docs/img/${f##*/}" || { echo "docs/img stale: run tools/render_screens.sh (${f##*/} differs)" >&2; exit 1; }
+    done
+    echo "render_screens: docs/img current"
+fi
+
 # the port's own unit, the engine's sources (vendor/tessera/firmware/src) and the
 # shared test (vendor/tessera/tests): the test finds the port's host shim
 # through -Itests

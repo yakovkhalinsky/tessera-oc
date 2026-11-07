@@ -96,6 +96,8 @@ Two things the module cannot say, and what happens instead:
 
 The pitch scale's other setting is 0.1 V an octave, for V/oct systems.
 
+The panel, the screens and the controls, with pictures: **[docs/GUIDE.md](docs/GUIDE.md)**.
+
 ---
 
 ## Layout
@@ -125,6 +127,7 @@ tools/               the build scripts
   build_host.sh        the host build and the generator test
   check_sections.py    the memory map's check (no orphan RAM, nothing unwritten)
   release.sh           the firmware, the hex and the release notes
+  render_screens.sh    the guide's screens (docs/img/screen-*.png), drawn by the firmware's own code
 vendor/tessera/      the engine, as a submodule (a fork of Rastapopolix/tessera)
 ```
 
