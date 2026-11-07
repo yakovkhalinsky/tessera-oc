@@ -26,7 +26,7 @@ Last updated 2026-11-07. Update this file at the start and end of every job (see
 | 1b | the screen router, and shift read at the moment of the press | merged, PR #5 (`57f4e07`) |
 | guide | `docs/GUIDE.md`, the panel SVG, framebuffer PNG renders, a CI staleness check | merged, PR #6 (`4088c02`) |
 | tools | render check, two-way name compare, orphan PNG test | draft, PR #7 |
-| guide fix | the panel SVG shows the buttons stacked vertically between the encoders. Redraw them side by side above the encoders, and label them left (play/stop) and right (restart/shift) | to do |
+| guide fix | the panel SVG shows the buttons stacked vertically between the encoders. Redraw them side by side above the encoders, and label them left (play/stop) and right (restart/shift) | in progress: job panel-layout-2 |
 | 1c | wire 1a/1b into the firmware (L/R push, control map, screen menu, existing pages re-homed). The first phase with a hex worth flashing | next |
 | 2 | the drawing kit, 3x5 font, golden snapshots | to do |
 | 3 | OVERVIEW lanes | to do |
