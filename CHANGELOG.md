@@ -9,7 +9,7 @@ The port's releases. The version is the one the firmware carries
 - `parts/oc_ui_input.c`: the buttons and encoders as events (5 ms debounce, tap ≤ 400 ms, hold from 400 ms, long at 600 ms, BOTTOM as shift (each event says whether BOTTOM is held), TOP + BOTTOM chord within `UI_CHORD_MS` = 40 ms either way round, boot-latched buttons ignored until released, value acceleration) and the 1 kHz sampler's ring. Host-tested in `tests/oc_ui_test.c`; not wired into the firmware until phase 1b. Plan: `docs/UI-PLAN.md`.
 
 ### UI, phase 1b: the screen router (no change on the module yet)
-- `parts/oc_ui_nav.c`: the screen stack (four deep), the cursors, the screen menu, TRACK's tabs and the global controls (BOTTOM + L selects the track and BOTTOM + R sets the tempo on every screen, TOP plays and stops, a BOTTOM tap restarts, TOP + BOTTOM opens and closes PERFORM); it changes nothing in the engine, it tells the shell what to do. The L encoder moves the cursor and never changes the track.
+- `parts/oc_ui_nav.c`: the screen stack (four deep), the cursors, the screen menu, TRACK's tabs and the global controls (BOTTOM + L selects the track and BOTTOM + R sets the tempo, except on PERFORM where it sets the EVOLVE amount, TOP plays and stops, a BOTTOM tap restarts, TOP + BOTTOM opens and closes PERFORM); it changes nothing in the engine, it tells the shell what to do. The L encoder moves the cursor and never changes the track.
 - `parts/oc_ui_input.c`: a button's tap, hold and long carry the shift as it was when the button went down (BOTTOM released first no longer drops it). Host-tested in `tests/oc_ui_test.c` and `tests/oc_ui_nav_test.c`; stacked on phase 1a, wired into the firmware in phase 1c.
 
 ## v0.1.2 — UNTESTED ON HARDWARE until Yakov confirms

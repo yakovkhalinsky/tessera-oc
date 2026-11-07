@@ -24,11 +24,12 @@ enum {
     UI_ACT_PLAY_STOP,     /* TOP press (a TOP that carries the shift is still plain TOP) */
     UI_ACT_RESTART,       /* BOTTOM tap that was not a shift */
     UI_ACT_SELECT_TRACK,  /* BOTTOM + L turn, any screen: n tracks */
-    UI_ACT_TEMPO,         /* BOTTOM + R turn, any screen: n BPM steps */
+    UI_ACT_TEMPO,         /* BOTTOM + R turn, any screen but PERFORM: n BPM steps */
     UI_ACT_VALUE,         /* R turn: n detents, dt, fine (the shell applies ui_accel) */
     UI_ACT_ENTER,         /* R tap: open / toggle / confirm the row under the cursor */
     UI_ACT_CONTEXT,       /* R long: reset to default (TRACK), roll (PERFORM) */
-    UI_ACT_SECONDARY      /* BOTTOM + R tap: the screen's secondary action */
+    UI_ACT_SECONDARY,     /* BOTTOM + R tap: the screen's secondary action */
+    UI_ACT_MACRO          /* BOTTOM + R turn on PERFORM: the EVOLVE amount, n detents */
 };
 
 typedef struct {

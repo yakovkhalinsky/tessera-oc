@@ -110,6 +110,21 @@ static void check_stack(void)
     ev(UI_SRC_CHORD_TB, UI_EV_CHORD, 0, 0);
     check("depth: a full stack replaces its top",
           nav.depth == UI_NAV_DEPTH && at(UI_SCR_PERFORM, 4) && nav.stack[2] == UI_SCR_PERFORM);
+    to_screen(2);
+    ev(UI_SRC_CHORD_TB, UI_EV_CHORD, 0, 0);
+    a = ev(UI_SRC_CHORD_TB, UI_EV_CHORD, 0, 0);
+    check("chord: from TRACK, TOP + BOTTOM twice comes back to TRACK", a.kind == UI_ACT_NONE && at(UI_SCR_TRACK, 2));
+    to_screen(2);
+    ev(UI_SRC_CHORD_TB, UI_EV_CHORD, 0, 0);
+    ev(UI_SRC_PUSH_L, UI_EV_LONG, 0, 0);
+    ev(UI_SRC_ENC_L, UI_EV_TURN, 2, 0);
+    ev(UI_SRC_PUSH_R, UI_EV_TAP, 0, 0);       /* OVERVIEW, TRACK, PERFORM, INFO: full */
+    ev(UI_SRC_PUSH_L, UI_EV_LONG, 0, 0);
+    over = at(UI_SCR_MENU, 4) && nav.stack[2] == UI_SCR_PERFORM;
+    ev(UI_SRC_ENC_L, UI_EV_TURN, -1, 0);
+    ev(UI_SRC_PUSH_R, UI_EV_TAP, 0, 0);
+    check("depth: the menu on a full stack replaces the top; its pick lands at four",
+          over && at(UI_SCR_PROJECT, 4) && nav.stack[2] == UI_SCR_PERFORM);
 }
 
 /* the global controls: the value, the track, the tempo, TOP and BOTTOM */
@@ -121,6 +136,11 @@ static void check_global(void)
     ui_nav_init(&nav);
     a = ev(UI_SRC_ENC_R, UI_EV_TURN, 3, 0);
     check("value: an R turn is a value", a.kind == UI_ACT_VALUE && a.n == 3 && a.dt == 7);
+    {
+        ui_event_t e = {UI_SRC_ENC_R, UI_EV_TURN, -4, 33, 1, 0};
+        a = ui_nav_event(&nav, &e);
+    }
+    check("value: the R turn's dt and fine pass through", a.kind == UI_ACT_VALUE && a.n == -4 && a.dt == 33 && a.fine == 1);
     ui_nav_init(&nav);
     ev(UI_SRC_PUSH_L, UI_EV_LONG, 0, 0);
     ev(UI_SRC_ENC_L, UI_EV_TURN, 2, 0);
@@ -135,7 +155,7 @@ static void check_global(void)
         a = ev(UI_SRC_ENC_L, UI_EV_SHIFT_TURN, -2, 1);
         ok = a.kind == UI_ACT_SELECT_TRACK && a.n == -2;
         a = ev(UI_SRC_ENC_R, UI_EV_SHIFT_TURN, 5, 1);
-        ok = ok && a.kind == UI_ACT_TEMPO && a.n == 5;
+        ok = ok && a.n == 5 && (i == 1 || a.kind == UI_ACT_TEMPO);   /* PERFORM: below */
         a = ev(UI_SRC_TOP, UI_EV_DOWN, 0, 0);
         ok = ok && a.kind == UI_ACT_PLAY_STOP;
         a = ev(UI_SRC_TOP, UI_EV_DOWN, 0, 1);
@@ -146,6 +166,9 @@ static void check_global(void)
                  NAMES[ui_nav_screen(&nav)]);
         check(what, ok);
     }
+    to_screen(1);
+    a = ev(UI_SRC_ENC_R, UI_EV_SHIFT_TURN, 5, 1);
+    check("perform: BOTTOM + R is the EVOLVE amount, not the tempo", a.kind == UI_ACT_MACRO && a.n == 5);
 }
 
 /* TRACK: the cursor, the tabs, enter and context */
@@ -170,6 +193,8 @@ static void check_track(void)
     check("track: an R tap enters the row under the cursor", a.kind == UI_ACT_ENTER);
     a = ev(UI_SRC_PUSH_R, UI_EV_LONG, 0, 0);
     check("track: an R long is the context action", a.kind == UI_ACT_CONTEXT);
+    a = ev(UI_SRC_PUSH_R, UI_EV_LONG, 0, 1);
+    check("track: a shifted R long is still the context action", a.kind == UI_ACT_CONTEXT);
 }
 
 /* the rows the shell reports, and the cursor's clamp */

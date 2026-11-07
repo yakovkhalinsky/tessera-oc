@@ -100,7 +100,7 @@ ui_action_t ui_nav_event(ui_nav_t *nav, const ui_event_t *ev)
         return act(UI_ACT_NONE, ev);
     case UI_SRC_ENC_R:
         if (ev->kind == UI_EV_SHIFT_TURN)
-            return act(UI_ACT_TEMPO, ev);
+            return act(scr == UI_SCR_PERFORM ? UI_ACT_MACRO : UI_ACT_TEMPO, ev);   /* PERFORM: EVOLVE */
         if (ev->kind == UI_EV_TURN && scr != UI_SCR_MENU)
             return act(UI_ACT_VALUE, ev);
         return act(UI_ACT_NONE, ev);
