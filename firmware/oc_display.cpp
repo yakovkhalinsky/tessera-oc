@@ -72,6 +72,11 @@ static void oled_data(const uint8_t *d, uint32_t n)
 
 void oc_display_init(void)
 {
+    /* the kit's context first, so the buffer is never a null pointer: the
+     * crash pager and the safe mode draw through the wrappers below, and
+     * they must not fault if the bus is the thing that failed */
+    oc_gfx_init(&display_gfx, display_fb);
+
     pinMode(OLED_CS, OUTPUT);
     pinMode(OLED_RST, OUTPUT);
     pinMode(OLED_DC, OUTPUT);
@@ -96,7 +101,6 @@ void oc_display_init(void)
         oled_command(c);
     }
     oc_spi_unlock();
-    oc_gfx_init(&display_gfx, display_fb);
     oc_gfx_clear(&display_gfx);
     oc_display_flush();
 }

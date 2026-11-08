@@ -214,8 +214,8 @@ With no report but a boot that stopped part of the way through, the screen shows
 ## Regenerating the pictures
 
 ```sh
-tools/build_host.sh build      # the engine's generated tables (build/gen)
-tools/render_screens.sh        # writes docs/img/screen-*.png and tests/golden/*.txt
+tools/build_host.sh build                # the engine's generated tables (build/gen)
+tools/render_screens.sh docs/img tests/golden   # the PNGs and the goldens
 ```
 
 The pictures come from the code, so a change to a screen means rendering them
