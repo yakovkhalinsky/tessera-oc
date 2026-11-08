@@ -22,19 +22,20 @@
  * PROJECT (the slots; the drive is read only), INFO (the timings) and the
  * screen menu.
  *
- * The face is Tessera's 5 x 7 (the engine's mono_font.h). */
+ * Phase 2, the drawing: the screen is the grid of parts/oc_ui_screen.c, drawn
+ * by the kit of parts/oc_ui_gfx.c into the panel's own pixels. The faces are
+ * Tessera's 5 x 7 (the engine's mono_font.h) and the port's own 3 x 5. */
 
 #include <Arduino.h>
 #include "oc_port.h"
 #include "oc_version.h"
 #include "../parts/oc_ui_input.h"
 #include "../parts/oc_ui_nav.h"
+#include "../parts/oc_ui_screen.h"
 
 /* --- the display, the platform's side --- */
 void oc_display_init(void);
-void oc_display_clear(void);
-void oc_display_text(int32_t x, int32_t y, const char *s);
-void oc_display_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t on);
+uint8_t *oc_display_fb(void);
 void oc_display_flush(void);
 
 /* --- the engine, through the port --- */
@@ -288,11 +289,6 @@ static uint32_t ui_draw_us, ui_draw_max_us, ui_flush_us, ui_flush_max_us;
 static uint32_t ui_loop_max_us, ui_loop_last;
 
 /* --- the screen --- */
-static void draw_line(int32_t row, const char *s)
-{
-    oc_display_text(0, row * 8, s);
-}
-
 static const char *const TAB_NAME[UI_TAB_COUNT] = {"GEN", "SCL", "CV", "MOD"};
 static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRACK", "PROJECT", "INFO"};
 
@@ -311,59 +307,18 @@ static const char *ui_footer(uint32_t screen)
     }
 }
 
-/* the list: a row per line, the cursor's row marked, scrolled so it stays on */
-static void draw_rows(uint32_t n, uint32_t cur)
+/* the screen's title: the header's bar */
+static void ui_title(uint32_t screen, char *title, uint32_t size)
 {
-    char line[24], label[12], value[10];
-    uint32_t first = 0;
-    if (cur >= 6u)
-        first = cur - 5u;
-    if (first + 6u > n)
-        first = n > 6u ? n - 6u : 0;
-    for (uint32_t i = 0; i < 6u && first + i < n; i++) {
-        uint32_t r = first + i;
-        ui_row_text(&ui_rows[r], label, value);
-        snprintf(line, sizeof line, "%c%-11s %s", r == cur ? '>' : ' ', label, value);
-        draw_line(1 + (int32_t)i, line);
-    }
-}
-
-static void draw_info(void)
-{
-    char line[24];
-    snprintf(line, sizeof line, "v%s", OC_VERSION_STRING);
-    draw_line(1, line);
-    snprintf(line, sizeof line, "BLK MAX %lu US", (unsigned long)oc_diag_blk_max_us());
-    draw_line(2, line);
-    snprintf(line, sizeof line, "DRAW %lu/%lu US", (unsigned long)ui_draw_us, (unsigned long)ui_draw_max_us);
-    draw_line(3, line);
-    snprintf(line, sizeof line, "FLUSH %lu/%lu US", (unsigned long)ui_flush_us, (unsigned long)ui_flush_max_us);
-    draw_line(4, line);
-    snprintf(line, sizeof line, "LOOP MAX %lu US", (unsigned long)ui_loop_max_us);
-    draw_line(5, line);
-    snprintf(line, sizeof line, "STORAGE %s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
-    draw_line(6, line);
-}
-
-static void draw_perform(void)
-{
-    char line[24];
-    for (uint32_t t = 0; t < 4u; t++) {
-        uint8_t gen = oc_track_generator(t);
-        snprintf(line, sizeof line, "T%u %s", (unsigned)(t + 1u), gen < 14u ? GEN_NAME[gen] : "?");
-        draw_line(1 + (int32_t)t, line);
-    }
-    draw_line(6, "MORE IN PHASE 5");
-}
-
-static void draw_menu(void)
-{
-    char line[24];
-    uint32_t cur = ui_nav.cursor[UI_SCR_MENU] % UI_MENU_ITEMS;
-    for (uint32_t i = 0; i < UI_MENU_ITEMS; i++) {
-        snprintf(line, sizeof line, "%c%s", i == cur ? '>' : ' ', MENU_NAME[i]);
-        draw_line(1 + (int32_t)i, line);
-    }
+    if (screen == UI_SCR_TRACK)
+        snprintf(title, size, "TRACK %s T%u %3d BPM", TAB_NAME[ui_nav.tab % UI_TAB_COUNT],
+                 (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
+    else if (screen == UI_SCR_OVERVIEW)
+        snprintf(title, size, "HOME T%u %3d BPM", (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
+    else
+        snprintf(title, size, "%s", screen == UI_SCR_PERFORM ? "PERFORM"
+                                          : screen == UI_SCR_PROJECT ? "PROJECT"
+                                          : screen == UI_SCR_INFO ? "INFO" : "MENU");
 }
 
 /* the rows of every screen, told to the router (its cursors are clamped) */
@@ -377,44 +332,102 @@ static uint32_t ui_rows_for(uint32_t screen)
     return n;
 }
 
+/* The screen, as the grid draws it: the rows' labels and values, and the
+ * cursor's row. The strings live here, because the grid only draws them.
+ *
+ * Each row has its own buffers: the grid reads them all at once, so they
+ * cannot share one. */
+#define UI_LABEL_MAX 12
+#define UI_VALUE_MAX 12
+
+static oc_screen_t ui_screen;
+static oc_gfx_t ui_gfx;                    /* the panel's pixels, for the kit */
+static char ui_title_buf[24];
+static char ui_label_buf[UI_ROWS][UI_LABEL_MAX];
+static char ui_value_buf[UI_ROWS][UI_VALUE_MAX];
+
+/* the info screen's rows: what the module knows about itself */
+static const char *const INFO_LABEL[6] = {"VERSION", "BLK MAX", "DRAW", "FLUSH", "LOOP MAX", "STORAGE"};
+
 void ui_draw(void)
 {
-    char line[24];
     uint32_t screen = ui_nav_screen(&ui_nav);
     uint32_t t0 = micros(), t1;
     uint32_t n = ui_rows_for(screen);
     uint32_t cur = ui_nav.cursor[screen];
+    uint32_t i;
 
-    oc_display_clear();
-    if (screen == UI_SCR_TRACK)
-        snprintf(line, sizeof line, "TRACK %s T%u %3d BPM", TAB_NAME[ui_nav.tab % UI_TAB_COUNT],
-                 (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
-    else if (screen == UI_SCR_OVERVIEW)
-        snprintf(line, sizeof line, "HOME T%u %3d BPM", (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
-    else
-        snprintf(line, sizeof line, "%s", screen == UI_SCR_PERFORM ? "PERFORM"
-                                          : screen == UI_SCR_PROJECT ? "PROJECT"
-                                          : screen == UI_SCR_INFO ? "INFO" : "MENU");
-    draw_line(0, line);
+    ui_screen.title = ui_title_buf;
+    ui_screen.footer = ui_footer(screen);
+    ui_screen.nrows = 0;
+    ui_screen.cursor = -1;
+    ui_title(screen, ui_title_buf, sizeof ui_title_buf);
 
-    if (screen == UI_SCR_INFO)
-        draw_info();
-    else if (screen == UI_SCR_PERFORM)
-        draw_perform();
-    else if (screen == UI_SCR_MENU)
-        draw_menu();
-    else if (screen == UI_SCR_PROJECT && !oc_storage_ok()) {
+    if (screen == UI_SCR_MENU) {
+        /* the screen menu: the five screens, the cursor's one inverted */
+        for (i = 0; i < UI_MENU_ITEMS; i++) {
+            ui_screen.rows[i].label = MENU_NAME[i];
+            ui_screen.rows[i].value = 0;
+        }
+        ui_screen.nrows = UI_MENU_ITEMS;
+        ui_screen.cursor = (int32_t)(cur % UI_MENU_ITEMS);
+    } else if (screen == UI_SCR_INFO) {
+        /* the info screen: the version and the timings, a row each */
+        snprintf(ui_value_buf[0], UI_VALUE_MAX, "%s", OC_VERSION_STRING);
+        snprintf(ui_value_buf[1], UI_VALUE_MAX, "%lu US", (unsigned long)oc_diag_blk_max_us());
+        snprintf(ui_value_buf[2], UI_VALUE_MAX, "%lu/%lu US", (unsigned long)ui_draw_us, (unsigned long)ui_draw_max_us);
+        snprintf(ui_value_buf[3], UI_VALUE_MAX, "%lu/%lu US", (unsigned long)ui_flush_us, (unsigned long)ui_flush_max_us);
+        snprintf(ui_value_buf[4], UI_VALUE_MAX, "%lu US", (unsigned long)ui_loop_max_us);
+        snprintf(ui_value_buf[5], UI_VALUE_MAX, "%s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
+        for (i = 0; i < 6u; i++) {
+            ui_screen.rows[i].label = INFO_LABEL[i];
+            ui_screen.rows[i].value = ui_value_buf[i];
+        }
+        ui_screen.nrows = 6;
+    } else if (screen == UI_SCR_PERFORM) {
+        /* the perform screen: the four tracks, for now */
+        for (i = 0; i < 4u; i++) {
+            uint8_t gen = oc_track_generator(i);
+            snprintf(ui_label_buf[i], UI_LABEL_MAX, "T%u %s", (unsigned)(i + 1u), gen < 14u ? GEN_NAME[gen] : "?");
+            ui_screen.rows[i].label = ui_label_buf[i];
+            ui_screen.rows[i].value = 0;
+        }
+        snprintf(ui_label_buf[4], UI_LABEL_MAX, "MORE IN PHASE 5");
+        ui_screen.rows[4].label = ui_label_buf[4];
+        ui_screen.rows[4].value = 0;
+        ui_screen.nrows = 5;
+    } else if (screen == UI_SCR_PROJECT && !oc_storage_ok()) {
         /* the project screen without a drive: no load, and the screen says so */
-        snprintf(line, sizeof line, "SAVE OFF v%s", OC_VERSION);
-        draw_line(1, line);
-    } else
-        draw_rows(n, cur);
-    draw_line(7, ui_footer(screen));
+        snprintf(ui_label_buf[0], UI_LABEL_MAX, "SAVE OFF v%s", OC_VERSION);
+        ui_screen.rows[0].label = ui_label_buf[0];
+        ui_screen.rows[0].value = 0;
+        ui_screen.nrows = 1;
+    } else {
+        /* the lists: the engine's own rows, the cursor's row inverted */
+        uint32_t first = 0;
+        if (cur >= UI_ROWS)
+            first = cur - (UI_ROWS - 1u);
+        if (first + UI_ROWS > n)
+            first = n > UI_ROWS ? n - UI_ROWS : 0;
+        for (i = 0; i < UI_ROWS && first + i < n; i++) {
+            uint32_t r = first + i;
+            ui_row_text(&ui_rows[r], ui_label_buf[i], ui_value_buf[i]);
+            ui_screen.rows[i].label = ui_label_buf[i];
+            ui_screen.rows[i].value = ui_value_buf[i][0] ? ui_value_buf[i] : 0;
+        }
+        ui_screen.nrows = i;
+        if (cur < n)
+            ui_screen.cursor = (int32_t)(cur - first);
+    }
 
     t1 = micros();
-    oc_display_flush();
-    ui_draw_us = t1 - t0;
-    ui_flush_us = micros() - t1;
+    oc_screen_draw(&ui_gfx, &ui_screen);
+    {
+        uint32_t t2 = micros();
+        oc_display_flush();
+        ui_draw_us = t2 - t1;
+        ui_flush_us = micros() - t2;
+    }
     if (ui_draw_us > ui_draw_max_us) ui_draw_max_us = ui_draw_us;
     if (ui_flush_us > ui_flush_max_us) ui_flush_max_us = ui_flush_us;
 }
@@ -546,6 +559,7 @@ void ui_open(uint32_t screen, uint32_t tab)
 
 void ui_init(void)
 {
+    oc_gfx_init(&ui_gfx, oc_display_fb());
     enc_left.pin_a = oc_pins.enc_l1;
     enc_left.pin_b = oc_pins.enc_l2;
     enc_right.pin_a = oc_pins.enc_r1;

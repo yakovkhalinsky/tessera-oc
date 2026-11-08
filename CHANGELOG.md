@@ -5,6 +5,38 @@ The port's releases. The version is the one the firmware carries
 
 ## Unreleased
 
+### UI, phase 2: the drawing kit, the 3x5 face, the grid
+
+- `parts/oc_ui_gfx.c`: the drawing kit, pure C and host-testable. It draws
+  into a framebuffer the caller owns, in the panel's own layout, so the
+  display's buffer is handed over as it is and nothing is converted. The
+  primitives: `px`, `hline`, `vline`, `fill_rect`, `invert_rect` (a rectangle
+  flipped), a clip rectangle, `text5x7`, `text3x5`, `text5x7_x2` (twice the
+  size, for the big numbers of phase 3), `text_right` (a string ending at a
+  column) and `ellipsize` (a string cut to fit, with a dot for the rest).
+- `parts/oc_ui_font3x5.h`: a new 3x5 face for the footer, drawn for this
+  port: the space, the digits, A to Z and `+ - . : / > ~`. Four pixels a glyph,
+  so 32 columns fit across the panel.
+- `parts/oc_ui_screen.c`: the grid every screen obeys. The header (the top
+  nine rows) is a lit bar with the title's letters cut out of it; the body
+  (47 rows) is six rows of text, the cursor's row lit with its letters cut
+  out of it; the footer (eight rows) is the screen's hints in the 3x5 face.
+  A row's label is on the left and its value on the right.
+- `firmware/oc_display.cpp`: the SPI side and the panel's pixels, and
+  nothing else. The drawing is the kit's. The crash pager and the safe mode
+  draw with the plain text of the 5x7 face, and they come out byte for byte
+  as before.
+- `firmware/oc_ui.cpp`: the shell draws the grid. The screens themselves are
+  unchanged in what they say: OVERVIEW still lists the tempo, the four tracks
+  and the clock; the screen menu still lists the five screens; INFO still
+  reports the version and the timings.
+- `tests/golden/`: every screen as text, 64 lines of 128 characters. A picture
+  cannot be diffed; text can, so a reviewer sees exactly which pixels a
+  change moved. `tools/build_host.sh` checks them the same way it checks the
+  PNGs, and `UI_GOLDEN_UPDATE=1` rewrites them.
+- `tests/oc_ui_gfx_test.c`: the kit's own test: the primitives, the clip, the
+  two faces, the right-aligned text and the ellipsis.
+
 ### Docs: the panel and controls guide
 - `docs/GUIDE.md` (linked from the README): the uO_C rev A panel (`docs/img/panel.svg`), the controls on each screen as they are on `main`, the power-on, the safe mode and the crash pager. The screen pictures (`docs/img/screen-*.png`) are drawn by the firmware's own screen code on the host (`tools/render_screens.sh`, `tools/render_screens/`), and CI fails if they are stale (a screen that differs, is missing or is left over; the check is skipped, with a message, off Linux).
 - The panel drawing and the controls tables follow the real panel: the LEFT and RIGHT buttons side by side under the display, above the encoders. The code calls them TOP and BOTTOM; LEFT is play / stop as calibrated (the FLIPCONTROLS flag picks the pinout).

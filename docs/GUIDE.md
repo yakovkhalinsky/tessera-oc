@@ -55,6 +55,19 @@ the power-on does nothing until it has been let go.
 The footers use short names: `L` and `R` are the encoders' turns, `LP` and
 `RP` their pushes, `LL` a long L push and `RB` the RIGHT button.
 
+## The screen's grid
+
+Every screen is the same shape, so the eye learns it once:
+
+- the **header** (the top nine rows): a lit bar with the title's letters cut
+  out of it
+- the **body** (the next 47 rows): six rows of text, the row the cursor is on
+  lit, with its letters cut out of it too
+- the **footer** (the bottom eight rows): the screen's hints, in a smaller
+  face
+
+A row's label is on the left and its value on the right.
+
 ## Power-on
 
 ![The splash](img/screen-splash.png)
@@ -74,7 +87,7 @@ At power-on the module shows these screens in order:
 ![OVERVIEW after a power-on with nothing saved](img/screen-home.png)
 
 The top line shows the selected track and the tempo. The bottom line is the
-footer.
+footer. The row the cursor is on is the lit one.
 
 | Row | R encoder turn | R tap |
 |---|---|---|
@@ -89,8 +102,8 @@ selected one (`T1` – `T4` on the top line).
 
 ![The screen menu](img/screen-menu.png)
 
-An L long press opens it from any screen. The L encoder moves the `>`, an R
-tap opens the screen, an L tap closes the menu.
+An L long press opens it from any screen. The L encoder moves the cursor (the
+lit row), an R tap opens the screen, an L tap closes the menu.
 
 ## TRACK
 
@@ -202,7 +215,7 @@ With no report but a boot that stopped part of the way through, the screen shows
 
 ```sh
 tools/build_host.sh build      # the engine's generated tables (build/gen)
-tools/render_screens.sh        # writes docs/img/screen-*.png
+tools/render_screens.sh        # writes docs/img/screen-*.png and tests/golden/*.txt
 ```
 
 The pictures come from the code, so a change to a screen means rendering them
@@ -213,3 +226,9 @@ or is left over in `docs/img`. The renderer runs on Linux only (it maps the
 firmware's fixed debug-register addresses); elsewhere `tools/build_host.sh`
 skips the check and says so. The panel drawing (`docs/img/panel.svg`) is drawn
 by hand.
+
+The **goldens** in `tests/golden/` are the same screens as text, 64 lines of
+128 characters, a `#` for a lit pixel and a `.` for a dark one. A picture
+cannot be diffed; text can, so a reviewer sees exactly which pixels a change
+moved. `tools/build_host.sh` checks them the same way it checks the PNGs, and
+`UI_GOLDEN_UPDATE=1 tools/build_host.sh` rewrites them.
