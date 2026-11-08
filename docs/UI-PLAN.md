@@ -354,6 +354,16 @@ clipping; full 1 KiB flush at 10 fps with the SPI lock held for the whole frame;
 * `firmware/oc_display.cpp` keeps the SPI side only, plus `oc_display_fb()` returning the buffer. The drawing code moves to `oc_ui_gfx.c`. Existing callers (`oc_diag.cpp`, splash) keep working through thin wrappers, so the crash and safe-mode screens are byte-identical.
 * **Golden snapshot harness:** `tests/oc_ui_test.c` renders a screen into a buffer and compares it with `tests/golden/<name>.txt` (64 lines of 128 `#`/`.`). The `UI_GOLDEN_UPDATE=1` env var rewrites the files. Also emit `.pbm` into `build/` (not committed) for README screenshots.
 
+> **As built (2026-11-08):** the kit, the face and the goldens are as above. The
+> grid itself is `parts/oc_ui_screen.c` (the header bar, the lit cursor row and
+> the 3×5 footer), and the shell draws it. Two things differ from the sketch:
+> the goldens come from the renderer (`tools/render_screens.sh`), not from a
+> separate test, so they are the screens the module actually shows; and the
+> kit takes its clip in a context (`oc_gfx_t`) rather than in module state, so
+> the crash pager's plain text and the UI's clipped text cannot disturb each
+> other. The `.pbm` output is there (`tools/render_screens.sh PNG_DIR GOLDEN_DIR
+> PBM_DIR`).
+
 **Phase 6: polish and frame budget:**
 
 * **Dirty-page flush:** keep a shadow copy of the last-sent 1 KiB. Send only the 128-byte pages that changed. The idle frame cost drops to ~0.

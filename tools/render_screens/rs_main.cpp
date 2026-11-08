@@ -126,6 +126,69 @@ static void chunk(FILE *f, const char *type, const uint8_t *data, uint32_t n)
     fwrite(sum, 1, 4, f);
 }
 
+/* the screen, as text and as a bitmap: the golden snapshot and the picture
+ *
+ * The golden is the screen the module shows, 64 lines of 128 characters, a
+ * '#' for a lit pixel and a '.' for a dark one. It is what a reviewer reads:
+ * the PNGs are pictures, and a picture cannot be diffed. The PBM is the same
+ * pixels in a format every image tool reads, for the README's screenshots.
+ *
+ * The goldens live in tests/golden/ and are checked against a fresh render,
+ * like the PNGs in docs/img/ are: a screen that changed without its golden
+ * being updated is a change nobody looked at.
+ *
+ * The crash and safe-mode screens draw with the plain text of the 5 x 7 face
+ * (the crash pager's own layout), so their goldens do not move when the grid
+ * changes. That is the point of having them. */
+static const char *golden_dir;        /* where the .txt goldens go, or 0 */
+static const char *pbm_dir;           /* where the .pbm files go, or 0 */
+
+static int save_golden(const char *name)
+{
+    char path[512], stem[256];
+    uint8_t row[W / 8];
+    FILE *f;
+    size_t n = strlen(name);
+
+    if (!golden_dir || !*golden_dir)
+        return 0;
+    if (n < 5 || strcmp(name + n - 4, ".png") != 0)
+        return 1;
+    snprintf(stem, sizeof stem, "%.*s", (int)(n - 4), name);
+
+    snprintf(path, sizeof path, "%s/%s.txt", golden_dir, stem);
+    f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "render_screens: cannot write %s\n", path);
+        return 1;
+    }
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++)
+            fputc(lit(x, y) ? '#' : '.', f);
+        fputc('\n', f);
+    }
+    fclose(f);
+
+    if (pbm_dir && *pbm_dir) {
+        snprintf(path, sizeof path, "%s/%s.pbm", pbm_dir, stem);
+        f = fopen(path, "wb");
+        if (!f) {
+            fprintf(stderr, "render_screens: cannot write %s\n", path);
+            return 1;
+        }
+        fprintf(f, "P4\n%d %d\n", W, H);
+        for (int y = 0; y < H; y++) {
+            memset(row, 0, sizeof row);
+            for (int x = 0; x < W; x++)
+                if (lit(x, y))
+                    row[x / 8] |= (uint8_t)(0x80u >> (x % 8));
+            fwrite(row, 1, sizeof row, f);
+        }
+        fclose(f);
+    }
+    return 0;
+}
+
 /* the panel as an 8-bit grey picture: lit = 255, dark = 0 */
 static int save_png(const char *dir, const char *name)
 {
@@ -185,6 +248,8 @@ static int save_png(const char *dir, const char *name)
     free(raw);
     free(z);
     printf("render_screens: %s\n", path);
+    if (save_golden(name))
+        return 1;
     return 0;
 }
 
@@ -247,6 +312,8 @@ int main(int argc, char **argv)
         return 1;
     }
     out_dir = argc > 1 ? argv[1] : "docs/img";
+    golden_dir = argc > 2 ? argv[2] : 0;             /* the .txt goldens, or none */
+    pbm_dir = argc > 3 ? argv[3] : 0;                /* the .pbm files, or none */
     crc_init();
     memset(level, HIGH, sizeof level);                /* every button released */
 

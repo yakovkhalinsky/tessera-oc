@@ -4,7 +4,11 @@
 # The guide's screens (docs/GUIDE.md): build tools/render_screens against the
 # firmware's own screen code and the engine, and write the PNGs.
 #
-#   tools/render_screens.sh [OUTDIR]     (default docs/img)
+#   tools/render_screens.sh [PNG_DIR] [GOLDEN_DIR] [PBM_DIR]
+#
+# The PNGs go to PNG_DIR (default docs/img). The goldens - the same screens as
+# text, 64 lines of 128 characters, which a reviewer can diff - go to
+# GOLDEN_DIR (default: none). The PBMs go to PBM_DIR (default: none).
 set -e
 cd "$(dirname "$0")/.."
 OUT=build/render_screens
@@ -21,4 +25,6 @@ done
 c++ -O2 -Wall -Wextra -DOC_VERSION_EXTRA='"_T40"' -DOC_ENC_REV_PINS_21_22=1 $INC -o "$OUT/render_screens" "$SRC/rs_main.cpp" \
     "$OUT/rs_engine.o" "$OUT/oc_display.o" "$OUT/oc_ui.o" "$OUT/oc_diag.o" "$OUT/oc_ui_parts.o"
 mkdir -p "${1:-docs/img}"
-exec "$OUT/render_screens" "${1:-docs/img}"
+[ -n "${2:-}" ] && mkdir -p "$2"
+[ -n "${3:-}" ] && mkdir -p "$3"
+exec "$OUT/render_screens" "${1:-docs/img}" "${2:-}" "${3:-}"
