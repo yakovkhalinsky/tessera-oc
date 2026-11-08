@@ -35,7 +35,8 @@ The port's releases. The version is the one the firmware carries
   change moved. `tools/build_host.sh` checks them the same way it checks the
   PNGs, and `UI_GOLDEN_UPDATE=1` rewrites them.
 - `tests/oc_ui_gfx_test.c`: the kit's own test: the primitives, the clip, the
-  two faces, the right-aligned text and the ellipsis.
+  two faces, the right-aligned text and the ellipsis, and the grid itself (the
+  header's bar, the cursor's lit row, a label cut with a dot, the footer).
 
 ### Docs: the panel and controls guide
 - `docs/GUIDE.md` (linked from the README): the uO_C rev A panel (`docs/img/panel.svg`), the controls on each screen as they are on `main`, the power-on, the safe mode and the crash pager. The screen pictures (`docs/img/screen-*.png`) are drawn by the firmware's own screen code on the host (`tools/render_screens.sh`, `tools/render_screens/`), and CI fails if they are stale (a screen that differs, is missing or is left over; the check is skipped, with a message, off Linux).

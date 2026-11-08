@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "oc_ui_gfx.h"
+#include "oc_ui_screen.h"
 
 static int checks, failures;
 
@@ -274,6 +275,70 @@ static void check_ellipsize(void)
     check("ellipsize: no room means nothing", n == 0 && buf[0] == 0);
 }
 
+/* --- the grid --- */
+
+/* the grid: the header's bar, the rows, the cursor's lit row, the footer */
+static void check_grid(void)
+{
+    oc_gfx_t g;
+    oc_screen_t s;
+    char lab[40];
+
+    oc_gfx_init(&g, fb);
+
+    /* a screen with no cursor: the header, three rows and the footer */
+    memset(&s, 0, sizeof s);
+    s.title = "HOME";
+    s.rows[0].label = "TEMPO";
+    s.rows[0].value = 0;
+    s.rows[1].label = "T1";
+    s.rows[1].value = "120";
+    snprintf(lab, sizeof lab, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    s.rows[2].label = lab;
+    s.rows[2].value = 0;
+    s.nrows = 3;
+    s.cursor = -1;
+    s.footer = "L:ROW";
+    oc_screen_draw(&g, &s);
+
+    /* the header: a lit bar with the title knocked out of it */
+    check("grid: the header's bar is lit", lit(127, 0) == 1);
+    check("grid: the title is knocked out of the bar", lit(2, 1) == 0);
+    check("grid: the bar is under the title too", lit(2, 8) == 1);
+
+    /* the body: the rows are text on a dark ground */
+    check("grid: a row is not lit", lit(60, 9) == 0);
+    check("grid: nothing between the label and the value", lit(60, 17) == 0);
+    check("grid: the value ends at the right margin", lit(126, 17) == 0 && lit(127, 20) == 0);
+
+    /* a label that does not fit is cut, and a dot says so */
+    check("grid: a label that does not fit is cut with a dot", lit(117, 30) == 1);
+    check("grid: and the text does not run on", lit(122, 25) == 0);
+
+    /* the footer: the small face, in the bottom band */
+    check("grid: the footer is drawn", lit(2, 58) == 1);
+    check("grid: the footer is in the small face", lit(2, 63) == 0);
+    check("grid: the band above the footer is empty", lit(2, 56) == 0 && lit(2, 57) == 0);
+
+    /* the cursor's row: a lit band, with the row's text knocked out of it */
+    oc_gfx_init(&g, fb);
+    memset(&s, 0, sizeof s);
+    s.title = "HOME";
+    s.rows[0].label = "TEMPO";
+    s.rows[0].value = 0;
+    s.rows[1].label = "T1";
+    s.rows[1].value = "120";
+    s.nrows = 2;
+    s.cursor = 1;
+    s.footer = "L:ROW";
+    oc_screen_draw(&g, &s);
+
+    check("grid: the cursor's row is lit", lit(127, 20) == 1);
+    check("grid: the other row is not", lit(127, 9) == 0);
+    check("grid: the cursor's row's text is knocked out", lit(2, 17) == 0);
+    check("grid: and so is its value", lit(123, 17) == 0);
+}
+
 int main(void)
 {
     check_px();
@@ -285,6 +350,7 @@ int main(void)
     check_text_x2();
     check_text_right();
     check_ellipsize();
+    check_grid();
 
     printf("oc_gfx: %d checks, %d failing\n", checks, failures);
     return failures ? 1 : 0;

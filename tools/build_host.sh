@@ -73,8 +73,9 @@ cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_test" tests/oc_ui_t
 cc -std=c99 -Wall -Wextra -Werror -DUI_CHORD_MS=0u -Iparts -c -o "$OUT/oc_ui_input_nochord.o" parts/oc_ui_input.c
 # the UI's screen router (parts/oc_ui_nav.c)
 cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_nav_test" tests/oc_ui_nav_test.c parts/oc_ui_nav.c
-# the UI's drawing kit (parts/oc_ui_gfx.c): the primitives and the two faces
-cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_gfx_test" tests/oc_ui_gfx_test.c parts/oc_ui_gfx.c
+# the UI's drawing kit (parts/oc_ui_gfx.c) and the grid (parts/oc_ui_screen.c):
+# the primitives, the two faces and the shape of a screen
+cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_gfx_test" tests/oc_ui_gfx_test.c parts/oc_ui_gfx.c parts/oc_ui_screen.c
 
 [ "$1" = build ] && exit 0
 
