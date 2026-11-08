@@ -46,9 +46,11 @@ inputs - so the gate rides on the CV: a CV carries its pitch while the note
 sounds and rests at 0 V otherwise. No audio: the module composes, the rig
 plays.
 
-The screen shows the tempo, the transport and the four tracks; the left
-encoder moves down the list, the right one turns the value, the top and
-bottom buttons change the page.
+The screen is the same shape on every page: a lit bar at the top with the
+page's title cut out of it, six rows of text with the cursor's row lit, and
+the page's controls along the bottom in a small face. The left encoder
+moves the cursor down the rows, the right one turns the value, and the two
+buttons play, stop, restart and change the page.
 
 $VERSION: UNTESTED ON HARDWARE until Yakov confirms it. The changelog is in
 the repository (CHANGELOG.md).
