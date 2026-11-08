@@ -5,3 +5,5 @@
  * the host tests build the same files on their own (tools/build_host.sh). */
 #include "../parts/oc_ui_input.c"
 #include "../parts/oc_ui_nav.c"
+#include "../parts/oc_ui_gfx.c"
+#include "../parts/oc_ui_screen.c"

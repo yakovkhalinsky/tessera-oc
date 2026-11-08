@@ -8,8 +8,11 @@
  * is never asserted) and the OLED's is a plain pin too, driven by hand around
  * each transfer.
  *
- * The face is Tessera's own 5 x 7 font (the engine's mono_font.h), drawn a
- * pixel a bit: the module's screen is a third of the FM-1's area.
+ * This file owns the panel's pixels and the bus. The drawing is the kit's
+ * (parts/oc_ui_gfx.c, UI-PLAN §4.4): the pixels are the panel's own layout,
+ * so the kit draws into this buffer as it is and nothing is converted. The
+ * thin wrappers below are for the callers that draw before the UI exists (the
+ * crash pager, the safe mode, the splash).
  *
  * The init sequence is the one the o_C's own firmware uses (u8glib's SSD1306
  * sequence, which the SH1106 takes), and the pages are sent the same way: the
@@ -22,17 +25,20 @@
 #include "oc_port.h"
 #include "oc_spi.h"
 #include "oc_version.h"
-#include "mono_font.h"     /* Tessera's 5 x 7 face (the engine's) */
+#include "../parts/oc_ui_gfx.h"
 
 #define OLED_DC 6
 #define OLED_RST 7
 #define OLED_CS 8
 
-#define DISPLAY_W 128
-#define DISPLAY_H 64
-#define DISPLAY_PAGES (DISPLAY_H / 8)
+/* the panel's pixels: eight pages of 128 columns, one bit a pixel */
+static uint8_t display_fb[UI_FB_SIZE];
 
-static uint8_t display_fb[DISPLAY_W * DISPLAY_PAGES];
+/* the drawing context: the pixels, and the clip they are drawn through.
+ * The clip is always the whole panel here: the crash pager and the safe
+ * mode draw with the plain text of the 5 x 7 face, and they must come out
+ * byte for byte as they did before the kit existed. */
+static oc_gfx_t display_gfx;
 
 /* the init sequence (the o_C's own: oc-phazerville's SH1106 driver, from
  * u8glib's SSD1306 sequence) */
@@ -66,6 +72,11 @@ static void oled_data(const uint8_t *d, uint32_t n)
 
 void oc_display_init(void)
 {
+    /* the kit's context first, so the buffer is never a null pointer: the
+     * crash pager and the safe mode draw through the wrappers below, and
+     * they must not fault if the bus is the thing that failed */
+    oc_gfx_init(&display_gfx, display_fb);
+
     pinMode(OLED_CS, OUTPUT);
     pinMode(OLED_RST, OUTPUT);
     pinMode(OLED_DC, OUTPUT);
@@ -90,59 +101,25 @@ void oc_display_init(void)
         oled_command(c);
     }
     oc_spi_unlock();
-    memset(display_fb, 0, sizeof display_fb);
+    oc_gfx_clear(&display_gfx);
     oc_display_flush();
 }
 
+/* the panel's pixels: the kit draws into them */
+uint8_t *oc_display_fb(void)
+{
+    return display_fb;
+}
+
+/* the thin wrappers, for the callers that draw before the UI exists */
 void oc_display_clear(void)
 {
-    memset(display_fb, 0, sizeof display_fb);
+    oc_gfx_clear(&display_gfx);
 }
 
-void oc_display_pixel(int32_t x, int32_t y, uint8_t on)
-{
-    uint8_t *p;
-    if (x < 0 || x >= DISPLAY_W || y < 0 || y >= DISPLAY_H)
-        return;
-    p = &display_fb[(y / 8) * DISPLAY_W + x];
-    if (on)
-        *p |= (uint8_t)(1u << (y & 7));
-    else
-        *p &= (uint8_t)~(1u << (y & 7));
-}
-
-void oc_display_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t on)
-{
-    for (int32_t i = 0; i < w; i++) {
-        oc_display_pixel(x + i, y, on);
-        oc_display_pixel(x + i, y + h - 1, on);
-    }
-    for (int32_t i = 0; i < h; i++) {
-        oc_display_pixel(x, y + i, on);
-        oc_display_pixel(x + w - 1, y + i, on);
-    }
-}
-
-/* a line of text: Tessera's 5 x 7 face, six pixels a glyph, eight pixels a
- * line. A lower-case letter is drawn as its capital, as the FM-1's Mono look
- * does. */
 void oc_display_text(int32_t x, int32_t y, const char *s)
 {
-    for (; *s; s++) {
-        uint8_t ch = (uint8_t)*s;
-        int32_t col;
-        if (ch >= 'a' && ch <= 'z')
-            ch = (uint8_t)(ch - 32);
-        if (ch < 32u || ch > 122u) {
-            x += 6;
-            continue;
-        }
-        for (int32_t r = 0; r < 7; r++)
-            for (col = 0; col < 5; col++)
-                if (MO_FONT[ch - 32u][r] & (16u >> col))
-                    oc_display_pixel(x + col, y + r, 1);
-        x += 6;
-    }
+    oc_gfx_text5x7(&display_gfx, (int16_t)x, (int16_t)y, s);
 }
 
 /* the screen to the panel: a page at a time, the column address at 2
@@ -158,7 +135,7 @@ void oc_display_flush(void)
      * the settings, so the tick's DAC write cannot slip in between them. */
     oc_spi_lock();
     SPI.beginTransaction(SPISettings(12000000, MSBFIRST, SPI_MODE0));
-    for (uint32_t page = 0; page < DISPLAY_PAGES; page++) {
+    for (uint32_t page = 0; page < UI_FB_PAGES; page++) {
         digitalWriteFast(OLED_DC, LOW);
         oled_select();
         SPI.transfer(0x10);            /* the column's high bits */
@@ -167,8 +144,8 @@ void oc_display_flush(void)
                                                 * RAM is 132 wide) */
         SPI.transfer(0xB0 | page);     /* the page */
         digitalWriteFast(OLED_DC, HIGH);
-        for (uint32_t x = 0; x < DISPLAY_W; x++)
-            SPI.transfer(display_fb[page * DISPLAY_W + x]);
+        for (uint32_t x = 0; x < UI_FB_W; x++)
+            SPI.transfer(display_fb[page * UI_FB_W + x]);
         oled_release();
     }
     SPI.endTransaction();
@@ -180,8 +157,8 @@ void oc_display_flush(void)
  * takes over. */
 void oc_display_splash(void)
 {
-    memset(display_fb, 0, sizeof display_fb);
-    oc_display_text((DISPLAY_W - 10 * 6) / 2, 20, "TESSERA-OC");
-    oc_display_text((DISPLAY_W - (int32_t)strlen(OC_VERSION_STRING) * 6) / 2, 36, OC_VERSION_STRING);
+    oc_gfx_clear(&display_gfx);
+    oc_gfx_text5x7(&display_gfx, (UI_FB_W - 10 * UI_CH_W) / 2, 20, "TESSERA-OC");
+    oc_gfx_text5x7(&display_gfx, (UI_FB_W - (int32_t)strlen(OC_VERSION_STRING) * UI_CH_W) / 2, 36, OC_VERSION_STRING);
     oc_display_flush();
 }

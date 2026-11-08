@@ -167,11 +167,12 @@ the quadrature table (`oc_enc_step`) only loses a step when both pins change bet
 1 kHz keeps every step up to 1000 state changes a second, 250 detents a second. A fast hand spin of a
 24-detent encoder (about 3 turns a second) is about 72 detents, 288 changes a second: a margin of
 about 3.5 for uneven phases and contact bounce. The ring holds 64 ms of samples; a sample that finds it
-full is counted (INFO's `RING`), and its detents are kept in the carry, so only a button level can
-be lost. On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, which runs at the
-highest priority any channel asked for (the tick's 80): the sampler's 160 is set before `begin()` and
-never raises it, and its callback runs after the tick's in the same handler, so it never preempts
-the tick.
+full is counted (INFO's `DROPS` row, as `RG`), and its detents are kept in the carry, so only a button
+level can be lost. On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, which runs at
+the highest priority any channel asked for (the tick's 80): the sampler's 160 is set before `begin()`
+and never raises it, and its callback runs after the tick's in the same handler, so it never preempts
+the tick. The tick sets its own priority before its `begin()`, so the shared interrupt is at 80 from
+the first tick and never at the framework's default (128).
 
 ### 3.5 Acceptance criteria (phase 1)
 
@@ -364,6 +365,16 @@ clipping; full 1 KiB flush at 10 fps with the SPI lock held for the whole frame;
 * Layout constants (`UI_HDR_H 9`, `UI_FTR_Y 56`, `UI_COL_W 32`, `UI_CH_W 6`, …) in `parts/oc_ui_gfx.h`.
 * `firmware/oc_display.cpp` keeps the SPI side only, plus `oc_display_fb()` returning the buffer. The drawing code moves to `oc_ui_gfx.c`. Existing callers (`oc_diag.cpp`, splash) keep working through thin wrappers, so the crash and safe-mode screens are byte-identical.
 * **Golden snapshot harness:** `tests/oc_ui_test.c` renders a screen into a buffer and compares it with `tests/golden/<name>.txt` (64 lines of 128 `#`/`.`). The `UI_GOLDEN_UPDATE=1` env var rewrites the files. Also emit `.pbm` into `build/` (not committed) for README screenshots.
+
+> **As built (2026-11-08):** the kit, the face and the goldens are as above. The
+> grid itself is `parts/oc_ui_screen.c` (the header bar, the lit cursor row and
+> the 3×5 footer), and the shell draws it. Two things differ from the sketch:
+> the goldens come from the renderer (`tools/render_screens.sh`), not from a
+> separate test, so they are the screens the module actually shows; and the
+> kit takes its clip in a context (`oc_gfx_t`) rather than in module state, so
+> the crash pager's plain text and the UI's clipped text cannot disturb each
+> other. The `.pbm` output is there (`tools/render_screens.sh PNG_DIR GOLDEN_DIR
+> PBM_DIR`).
 
 **Phase 6: polish and frame budget:**
 
