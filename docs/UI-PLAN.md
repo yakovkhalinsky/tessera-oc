@@ -162,6 +162,18 @@ loop polling but make the flush page-sliced (§5.4) so a loop pass is never long
 **Pin modes untouched. Only reads.** (This touches interrupt configuration, so Acid Burn reviews it
 explicitly.)
 
+**Note (p1d): 1 kHz polling is fine for the detented encoders.** A detent is 4 quadrature states, and
+the quadrature table (`oc_enc_step`) only loses a step when both pins change between two samples, so
+1 kHz keeps every step up to 1000 state changes a second, 250 detents a second. A fast hand spin of a
+24-detent encoder (about 3 turns a second) is about 72 detents, 288 changes a second: a margin of
+about 3.5 for uneven phases and contact bounce. The ring holds 64 ms of samples; a sample that finds it
+full is counted (INFO's `DROPS` row, as `RG`), and its detents are kept in the carry, so only a button
+level can be lost. On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, which runs at
+the highest priority any channel asked for (the tick's 80): the sampler's 160 is set before `begin()`
+and never raises it, and its callback runs after the tick's in the same handler, so it never preempts
+the tick. The tick sets its own priority before its `begin()`, so the shared interrupt is at 80 from
+the first tick and never at the framework's default (128).
+
 ### 3.5 Acceptance criteria (phase 1)
 
 * All existing pages (HOME, GEN, SCL, CV, MOD, PROJ, re-homed as OVERVIEW / TRACK tabs / PROJECT) are reachable from the menu. The footer hint matches the real mapping on every screen.

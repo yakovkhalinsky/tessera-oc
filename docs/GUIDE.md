@@ -48,7 +48,8 @@ LEFT is play / stop as calibrated.
 The module has no gate jacks, no digital outs and no MIDI out.
 
 The controls are read 1000 times a second by a timer of their own
-(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), below the engine's tick.
+(`ui_start` and `ui_service` in `firmware/oc_ui.cpp`), which never delays the
+engine's tick by more than about a microsecond.
 A press counts after 5 ms; a press up to 400 ms is a tap. A button held through
 the power-on does nothing until it has been let go.
 
@@ -134,11 +135,13 @@ The storage is read only, so there is no save. Without a drive the screen says
 
 ![INFO (the timings read 0 in the host's picture)](img/screen-info.png)
 
-The version; the longest engine block since the power-on (`BLK MAX`); the last
-and the longest screen draw and flush, in microseconds; the longest gap between
-two passes of the main loop (from two seconds after the boot); the storage
-(`RO`, read only, or `OFF`); and how many control events were dropped. They
-start again at every boot.
+The version and the storage (`RO`, read only, or `OFF`); the longest engine
+block since the power-on (`BLK MAX`); the last and the longest screen draw and
+flush, in microseconds; the longest gap between two passes of the main loop
+(from two seconds after the boot); and what the controls lost (`DROPS`): `EV`,
+the events the input queue had no room for, and `RG`, the 1 ms samples the
+sampler's buffer had no room for (a turn's detents are kept even then; a button
+press shorter than the gap can be missed). They start again at every boot.
 
 ## The safe mode
 

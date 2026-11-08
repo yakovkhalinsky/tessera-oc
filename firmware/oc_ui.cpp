@@ -13,14 +13,14 @@
  * the port's interface. So a generator's knobs are the same knobs the FM-1
  * shows, with the same ranges and the same names.
  *
- * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, below
- * the engine's tick) reads the six controls into a ring; the main loop drains
- * it into the input core (parts/oc_ui_input.c), whose events go to the screen
- * router (parts/oc_ui_nav.c), and the router's actions are applied here, to
- * the engine, through the port. The screens: OVERVIEW (the old HOME), TRACK
- * with the GEN, SCL, CV and MOD tabs, PERFORM (a stub until phase 5),
- * PROJECT (the slots; the drive is read only), INFO (the timings) and the
- * screen menu.
+ * Phase 1c, the shell: a 1 kHz sampler (an IntervalTimer of its own, on the
+ * engine tick's interrupt) reads the six controls into a ring; the main loop
+ * drains it into the input core (parts/oc_ui_input.c), whose events go to the
+ * screen router (parts/oc_ui_nav.c), and the router's actions are applied
+ * here, to the engine, through the port. The screens: OVERVIEW (the old
+ * HOME), TRACK with the GEN, SCL, CV and MOD tabs, PERFORM (a stub until
+ * phase 5), PROJECT (the slots; the drive is read only), INFO (the timings)
+ * and the screen menu.
  *
  * Phase 2, the drawing: the screen is the grid of parts/oc_ui_screen.c, drawn
  * by the kit of parts/oc_ui_gfx.c into the panel's own pixels. The faces are
@@ -253,13 +253,19 @@ static void ui_row_turn(const UiRow *row, int32_t steps)
 }
 
 /* --- the sampler --- */
-/* The six controls, read at 1 kHz by a timer of their own (below the
- * engine's tick, which keeps priority 80): the four buttons as a mask
- * (UI_BTN_*, pressed = LOW) and the two encoders' detents, into a ring the
- * main loop drains. The sampler starts only in normal mode (ui_start, from
- * setup, next to the tick): the safe mode and the crash pager read the
- * buttons themselves, as they always have. */
+/* The six controls, read at 1 kHz by a timer of their own: the four buttons
+ * as a mask (UI_BTN_*, pressed = LOW) and the two encoders' detents, into a
+ * ring the main loop drains. The sampler starts only in normal mode
+ * (ui_start, from setup, next to the tick): the safe mode and the crash
+ * pager read the buttons themselves, as they always have. */
 #define UI_SAMPLE_US 1000u
+/* On the Teensy 4 every IntervalTimer shares the PIT's one interrupt, and it
+ * runs at the highest priority any running channel asked for: the tick's 80.
+ * 160 only says the sampler never raises it. The channels' callbacks run one
+ * after the other in that one handler, the tick's channel (begun first)
+ * checked first, so the sampler never preempts the tick; its body is about
+ * 1 us. The priority is set before begin(), so the channel never starts at
+ * the default. */
 #define UI_SAMPLE_PRIORITY 160
 
 static IntervalTimer ui_timer;
@@ -347,7 +353,7 @@ static char ui_label_buf[UI_ROWS][UI_LABEL_MAX];
 static char ui_value_buf[UI_ROWS][UI_VALUE_MAX];
 
 /* the info screen's rows: what the module knows about itself */
-static const char *const INFO_LABEL[6] = {"VERSION", "BLK MAX", "DRAW", "FLUSH", "LOOP MAX", "STORAGE"};
+static const char *const INFO_LABEL[6] = {"VERSION", "BLK MAX", "DRAW", "FLUSH", "LOOP MAX", "DROPS"};
 
 void ui_draw(void)
 {
@@ -372,13 +378,16 @@ void ui_draw(void)
         ui_screen.nrows = UI_MENU_ITEMS;
         ui_screen.cursor = (int32_t)(cur % UI_MENU_ITEMS);
     } else if (screen == UI_SCR_INFO) {
-        /* the info screen: the version and the timings, a row each */
-        snprintf(ui_value_buf[0], UI_VALUE_MAX, "%s", OC_VERSION_STRING);
+        /* the info screen: the version and the timings, a row each. The
+         * version's row carries the storage's state (RO, read only, or OFF),
+         * and the last row says what the controls lost. */
+        snprintf(ui_value_buf[0], UI_VALUE_MAX, "%s %s", OC_VERSION_STRING, oc_storage_ok() ? "RO" : "OFF");
         snprintf(ui_value_buf[1], UI_VALUE_MAX, "%lu US", (unsigned long)oc_diag_blk_max_us());
         snprintf(ui_value_buf[2], UI_VALUE_MAX, "%lu/%lu US", (unsigned long)ui_draw_us, (unsigned long)ui_draw_max_us);
         snprintf(ui_value_buf[3], UI_VALUE_MAX, "%lu/%lu US", (unsigned long)ui_flush_us, (unsigned long)ui_flush_max_us);
         snprintf(ui_value_buf[4], UI_VALUE_MAX, "%lu US", (unsigned long)ui_loop_max_us);
-        snprintf(ui_value_buf[5], UI_VALUE_MAX, "%s DROP %u", oc_storage_ok() ? "RO" : "OFF", (unsigned)ui_in.dropped);
+        snprintf(ui_value_buf[5], UI_VALUE_MAX, "EV %u RG %lu", (unsigned)ui_in.dropped,
+                 (unsigned long)ui_ring.dropped);
         for (i = 0; i < 6u; i++) {
             ui_screen.rows[i].label = INFO_LABEL[i];
             ui_screen.rows[i].value = ui_value_buf[i];
@@ -576,6 +585,6 @@ void ui_init(void)
 void ui_start(void)
 {
     ui_in_init(&ui_in, ui_buttons_now(), millis());
-    ui_timer.begin(ui_sample, UI_SAMPLE_US);
     ui_timer.priority(UI_SAMPLE_PRIORITY);
+    ui_timer.begin(ui_sample, UI_SAMPLE_US);
 }

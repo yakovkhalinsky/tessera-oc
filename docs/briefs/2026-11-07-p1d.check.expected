@@ -1,0 +1,60 @@
+BUILD_HOST_EXIT=0
+render_screens: docs/img current
+oc_port: 41 checks, 0 failing
+oc_ui: 53 checks, 0 failing
+oc_nav: 47 checks, 0 failing
+0
+oc_ui: ring: 20 fast detents are 20 detents                                     ok
+oc_ui: ring: a ring with room drops nothing                                     ok
+oc_ui: ring: a full ring holds 64 samples                                       ok
+oc_ui: ring: the 36 samples that did not fit are counted                        ok
+oc_ui: ring: the detents that did not fit are still there                       ok
+PIO_EXIT=0
+teensy_size:   FLASH: code:119688, data:67460, headers:8432   free for files:1836036
+teensy_size:    RAM1: variables:162496, code:114424, padding:16648   free for local variables:230720
+teensy_size:    RAM2: variables:17568  free for malloc/new:506720
+SECTIONS_EXIT=0
+  the map is sound: nothing between _edata and _sbss, no orphan RAM
+the drive is opened for reading and nothing else
+READ_ONLY_EXIT=0
+WRITE_PATH_EXIT=0
+572:    ui_timer.priority(UI_SAMPLE_PRIORITY);
+573:    ui_timer.begin(ui_sample, UI_SAMPLE_US);
+1
+1
+1
+e1585159438e547a4f08c2840808003b  firmware/oc_ui.cpp
+e8678b8e0a88593de5219ad8be479cff  parts/oc_ui_input.c
+843778a5dffd49a0a799c265ad9a3402  parts/oc_ui_input.h
+af182dc7112a318e0e52e2b31b2f535d  tests/oc_ui_test.c
+384e0ac00dfbb0acddfc8dc6552521a9  docs/GUIDE.md
+888f6b2e06261665921158d71833a658  docs/UI-PLAN.md
+456d91be205f1d9b1e1d2c14a0ba2727  CHANGELOG.md
+153c57c2144eb17598036b986a923eef  docs/img/screen-crash-1.png
+ce96c4d3977b3220b24b7b6d5853ae4d  docs/img/screen-crash-2.png
+7b87baf941aff6331c5cafdbfd4cc65b  docs/img/screen-home.png
+b3fcce922259f2522ac2faf20a30b74b  docs/img/screen-info.png
+4bd58a06f15bf9b4ee80095646906c53  docs/img/screen-menu.png
+4c16cafb2c13381b7f06f3127065bf88  docs/img/screen-perform.png
+e5e7c3e891ca8276638df351b9719146  docs/img/screen-project.png
+ed414c32883f49ef3bcfebbcc0db7de3  docs/img/screen-reset.png
+d8de9abb18daa439509001af647fbb54  docs/img/screen-safe-mode.png
+69c299e94492cb9f9818ba6fd6b54ed4  docs/img/screen-splash.png
+92b96540ac564d0e107390416980ad87  docs/img/screen-track.png
+PINNED_UNCHANGED_EXIT=0
+5	0	CHANGELOG.md
+10	6	docs/GUIDE.md
+11	0	docs/UI-PLAN.md
+-	-	docs/img/screen-info.png
+14	7	firmware/oc_ui.cpp
+4	2	parts/oc_ui_input.c
+1	0	parts/oc_ui_input.h
+2	0	tests/oc_ui_test.c
+ M CHANGELOG.md
+ M docs/GUIDE.md
+ M docs/UI-PLAN.md
+ M docs/img/screen-info.png
+ M firmware/oc_ui.cpp
+ M parts/oc_ui_input.c
+ M parts/oc_ui_input.h
+ M tests/oc_ui_test.c

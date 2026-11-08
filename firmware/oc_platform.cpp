@@ -581,11 +581,14 @@ void setup(void)
     oc_stage(21);
 
     /* The tick: last of all, and at the priority the o_C's own firmware uses
-     * (OC_config.h:29). */
+     * (OC_config.h:29). The priority is set before begin(), so the channel
+     * never starts at the framework's default (128): on the Teensy 4 every
+     * IntervalTimer shares the PIT's one interrupt, and it runs at the
+     * highest priority any running channel asked for. */
     if (!oc_safe_mode) {
-        oc_timer.begin(oc_tick, OC_TICK_US);
         oc_timer.priority(80);
-        ui_start();                       /* the controls' sampler, below the tick */
+        oc_timer.begin(oc_tick, OC_TICK_US);
+        ui_start();                       /* the controls' sampler, after the tick */
     }
     oc_stage(22);
     oc_stage(23);
