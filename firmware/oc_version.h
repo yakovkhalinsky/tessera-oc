@@ -6,7 +6,7 @@
 #ifndef OC_VERSION_H_
 #define OC_VERSION_H_
 
-#define OC_VERSION "0.1.2"
+#define OC_VERSION "0.2.0"
 
 #ifndef OC_VERSION_EXTRA
 #define OC_VERSION_EXTRA ""

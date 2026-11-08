@@ -5,6 +5,11 @@ Last updated 2026-11-08. Update this file at the start and end of every job (see
 
 ## Where it stands
 
+- **v0.2.0** is the release: the new screen (the UI phases 1a to 2) on top
+  of v0.1.2's engine, platform and CV outs. It is **untested on hardware**
+  until Yakov flashes it: nothing of the UI phases has been on the module
+  yet. The hex is in the GitHub release; the pictures of every screen are
+  in `docs/img/`.
 - **v0.1.2** boots and runs on Yakov's uO_C, and the tracks show. The left
   encoder fix is confirmed on hardware (main build `c96d1ce`).
 - **UI plan:** `docs/UI-PLAN.md`. Yakov kept every default in its §8

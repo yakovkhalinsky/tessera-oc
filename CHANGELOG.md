@@ -3,7 +3,17 @@
 The port's releases. The version is the one the firmware carries
 (`firmware/oc_version.h`); the splash on the module's screen shows it.
 
-## Unreleased
+## v0.2.0 - UNTESTED ON HARDWARE until Yakov confirms it
+
+The first release with the new screen: the UI phases 1a to 2 (the input
+core, the router, the shell, the drawing kit, the 3x5 face and the grid).
+The engine, the platform and the CV outs are v0.1.2's, unchanged, and the
+engine still plays exactly what the FM-1 plays (the 342-check baseline).
+
+The screens are all the same shape now: a lit bar at the top with the
+page's title cut out of it, six rows of text with the cursor's row lit, and
+the page's controls along the bottom in a small face. The controls
+themselves are the same as they were.
 
 ### UI, phase 2: the drawing kit, the 3x5 face, the grid
 
