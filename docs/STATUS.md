@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-07. Update this file at the start and end of every job (see
+Last updated 2026-11-08. Update this file at the start and end of every job (see
 `CLAUDE.md`).
 
 ## Where it stands
@@ -31,8 +31,8 @@ The brief for each job run so far is in `docs/briefs/2026-11-07-<phase>.md`: p1a
 | guide fix | the panel SVG shows the buttons stacked vertically between the encoders. Redraw them side by side above the encoders, and label them left (play/stop) and right (restart/shift) | merged, PR #10 (`a3464d2`) |
 | briefs | back-fill the job briefs under `docs/briefs/` and these rows | merged, PR #9 (`ef0d859`) |
 | 1c | wire 1a/1b into the firmware (L/R push, control map, screen menu, existing pages re-homed). The first phase with a hex worth flashing | merged, PR #11 (`7f5c6b3`) |
-| 1d | the sampler's follow-ups: its timer priority set before `begin()`, a ring-full drop counter on INFO, a note in the plan on 1 kHz polling. No engine change | in review: job p1d, work commit b3cc835, draft PR #12; next: Yakov reviews and merges |
-| 2 | the drawing kit, 3x5 font, golden snapshots | in review: job p2, work commit a13e6ca, draft PR #13 (CI green); branch `ui/p2-gfx` from `main` (`7f5c6b3`); brief `docs/briefs/2026-11-08-p2.md`; the grid is applied to the phase 1 screens, the crash and safe-mode screens are byte-identical |
+| 1d | the sampler's follow-ups: its timer priority set before `begin()`, a ring-full drop counter on INFO, a note in the plan on 1 kHz polling. No engine change | in review: job p1d, work commit b3cc835, draft PR #12; next: Yakov reviews and merges. It has diverged from `main` since the phase 2 merge: it touches `firmware/oc_ui.cpp`, `docs/GUIDE.md`, `docs/STATUS.md` and `CHANGELOG.md`, so it needs `main` merged into its branch (no force-push) |
+| 2 | the drawing kit, 3x5 font, golden snapshots | merged, PR #13 (`937096a`); brief `docs/briefs/2026-11-08-p2.md`; the grid is applied to the phase 1 screens, the crash and safe-mode screens are byte-identical; next: phase 3, OVERVIEW's lanes |
 | 3 | OVERVIEW lanes | to do |
 | 4 | the TRACK edit screen | to do |
 | 5 | PERFORM | to do |
