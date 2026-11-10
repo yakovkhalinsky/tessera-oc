@@ -1,0 +1,710 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 0c7ebc8..5621247 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,13 @@
+ The port's releases. The version is the one the firmware carries
+ (`firmware/oc_version.h`); the splash on the module's screen shows it.
+ 
++## Unreleased
++
++### UI, phase 3: OVERVIEW's lanes
++- `firmware/oc_ui.cpp` / `parts/oc_ui_overview.c`: OVERVIEW is four lanes, one per track. The header carries the transport, the tempo (or `---` while the clock follows TR1), the clock source and the selected track. Each lane shows the engine's own generator name (the hand-copied `GEN_NAME[]` table is gone), the current note on the CV (`C2` is 0 V), a 16-cell gate history, mute (`M`) and a pending ROLL (`~`). The history is sampled in `ui_draw`, never in the 1 kHz sampler. L turn selects the lane, R turn changes the generator, R tap opens TRACK, R long mutes.
++- `parts/oc_out.c` / `parts/oc_view.c`: read-only accessors for the last note, a gate the UI has not yet consumed, mute and a pending ROLL. The two stores in the note path are one write each.
++- Host tests (`tests/oc_ui_overview_test.c`) for the note name and the history; goldens and pictures for the default, track 2 selected, track 3 muted, following TR1, and a ROLL on track 4. `docs/GUIDE.md` describes the lanes.
++
+ ## v0.2.0 - UNTESTED ON HARDWARE until Yakov confirms it
+ 
+ The first release with the new screen: the UI phases 1a to 2 (the input
+diff --git a/docs/GUIDE.md b/docs/GUIDE.md
+index 912f2c5..781237e 100644
+--- a/docs/GUIDE.md
++++ b/docs/GUIDE.md
+@@ -28,12 +28,12 @@ LEFT is play / stop as calibrated.
+ 
+ | Control or jack | What it does on `main` |
+ |---|---|
+-| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where the cursor on a `TRACK` row selects that track |
++| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where it selects the lane |
+ | **L encoder, tap** | back: closes the screen shown (at OVERVIEW it does nothing) |
+ | **L encoder, long press** (600 ms) | opens the screen menu |
+ | **R encoder, turn** | changes the value in the row under the cursor. A fast turn takes bigger steps (2, 4 or 8 a detent) on a wide range; turned while pushed in it is one step a detent; a list of names is always one step |
+-| **R encoder, tap** | enter: on an OVERVIEW `TRACK` row it opens TRACK; on PROJECT it loads the slot |
+-| **R encoder, long press** | on TRACK: puts the row's value back to its default |
++| **R encoder, tap** | enter: on OVERVIEW it opens TRACK for the selected lane; on PROJECT it loads the slot |
++| **R encoder, long press** | on OVERVIEW: mutes or unmutes the selected lane. On TRACK: puts the row's value back to its default |
+ | **LEFT button** (TOP in the code) | play / stop |
+ | **RIGHT button** (BOTTOM in the code) | a tap restarts from the top. Held, it is a shift for the other controls (below). Held at power-on, it starts the **safe mode** |
+ | **RIGHT + L turn** | selects the track (1 – 4, it wraps round), on every screen |
+@@ -63,7 +63,8 @@ Every screen is the same shape, so the eye learns it once:
+ - the **header** (the top nine rows): a lit bar with the title's letters cut
+   out of it
+ - the **body** (the next 47 rows): six rows of text, the row the cursor is on
+-  lit, with its letters cut out of it too
++  lit, with its letters cut out of it too. OVERVIEW is the exception: four
++  lanes, eleven pixels each, the selected lane lit
+ - the **footer** (the bottom eight rows): the screen's hints, in a smaller
+   face
+ 
+@@ -79,7 +80,7 @@ At power-on the module shows these screens in order:
+    below). Otherwise, if the last boot stopped part of the way through, the
+    module shows `RESET AT STAGE n` for five seconds.
+ 2. The **splash**: the module's name and the firmware's version.
+-3. **OVERVIEW** (its top line says `HOME`). If nothing is saved, the module
++3. **OVERVIEW**. If nothing is saved, the module
+    composes for itself: track 1 gets TURING, 2 gets EUCLID, 3 MARKOV and 4
+    MORPH, an octave apart, and it plays.
+ 
+@@ -87,17 +88,30 @@ At power-on the module shows these screens in order:
+ 
+ ![OVERVIEW after a power-on with nothing saved](img/screen-home.png)
+ 
+-The top line shows the selected track and the tempo. The bottom line is the
+-footer. The row the cursor is on is the lit one.
++Four lanes, one per track. The header carries the transport (`>` while it
++plays), the tempo, the clock (`INT` or `EXT`), the selected track and the
++word OVERVIEW. While the clock follows TR1 the tempo is shown as `---`. The
++selected lane is the lit one.
+ 
+-| Row | R encoder turn | R tap |
+-|---|---|---|
+-| `TEMPO` | the tempo, from 40 to 240 BPM (faster turns, bigger steps) | nothing |
+-| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list | opens TRACK for that track |
+-| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) | nothing |
++Each lane shows: the track number; the generator, named as the engine names
++it; the current note on the CV (`C2` is 0 V, `--` if there has been none);
++`M` if the track is muted, or `~` if a ROLL is waiting for the next bar;
++and a 16-cell strip of recent gates, filled when a gate was on (or a note
++started) in that frame. The strip is sampled when the screen is drawn, not
++by the controls' sampler. A muted lane shows an empty strip.
+ 
+-When the L encoder's cursor lands on a `TRACK` row, that track becomes the
+-selected one (`T1` – `T4` on the top line).
++![OVERVIEW, track 2 selected](img/screen-overview-t2.png)
++![OVERVIEW, track 3 muted](img/screen-overview-mute.png)
++![OVERVIEW, following TR1](img/screen-overview-ext.png)
++![OVERVIEW, a ROLL waiting on track 4](img/screen-overview-roll.png)
++
++| Control | What it does on OVERVIEW |
++|---|---|
++| L turn | selects the lane (and that track) |
++| R turn | changes that track's generator. The name is the engine's own (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER) |
++| R tap | opens TRACK for that track |
++| R long press | mutes or unmutes that track |
++| RIGHT + R turn | the tempo, 40 to 240 BPM (nothing while the clock follows TR1) |
+ 
+ ## The screen menu
+ 
+diff --git a/firmware/oc_port.h b/firmware/oc_port.h
+index 5e482e5..b66bb2c 100644
+--- a/firmware/oc_port.h
++++ b/firmware/oc_port.h
+@@ -97,6 +97,19 @@ uint32_t oc_out_mode(uint32_t part);
+ /* the track's generator */
+ void oc_set_generator(uint32_t tr, int32_t mode);
+ 
++/* OVERVIEW (phase 3): a generator's name from the engine's own descriptors
++ * (so there is no hand-copied table), the last note and the gate the UI
++ * sampled, mute, and a ROLL waiting for the next bar. The two "seen"
++ * values are set from the note path (one store, in the tick); the UI
++ * reads them in loop() and never from the sampler. */
++void oc_gen_label(uint32_t gen, char *buf, uint32_t n);
++int16_t oc_track_last_note(uint32_t tr);         /* MIDI note, or -1 if none */
++uint8_t oc_track_gate_seen(uint32_t tr);         /* gate on now, or a note since the last read; the flag is then cleared */
++int oc_track_muted(uint32_t tr);
++void oc_track_set_mute(uint32_t tr, int on);
++int oc_track_roll_pending(uint32_t tr);
++void oc_track_set_roll(uint32_t tr, uint16_t v); /* 0 = none; a non-zero value is the pending seed */
++
+ /* the project: the state, packed and unpacked (the engine's), and the slots
+  * it is kept in (the platform's storage) */
+ uint32_t oc_project_pack(uint8_t *out, uint32_t max);
+diff --git a/firmware/oc_ui.cpp b/firmware/oc_ui.cpp
+index d247c16..6ee985b 100644
+--- a/firmware/oc_ui.cpp
++++ b/firmware/oc_ui.cpp
+@@ -31,6 +31,7 @@
+ #include "oc_version.h"
+ #include "../parts/oc_ui_input.h"
+ #include "../parts/oc_ui_nav.h"
++#include "../parts/oc_ui_overview.h"
+ #include "../parts/oc_ui_screen.h"
+ 
+ /* --- the display, the platform's side --- */
+@@ -71,11 +72,9 @@ struct UiRow {
+ };
+ 
+ 
+-/* OVERVIEW (HOME): the tempo, the four tracks, the clock */
++/* OVERVIEW: four track lanes; tempo and the clock source live in the header */
+ static const UiRow PAGE_HOME[] = {
+-    {ROW_TEMPO, 0, 0},
+     {ROW_TRACK, 0, 0}, {ROW_TRACK, 0, 1}, {ROW_TRACK, 0, 2}, {ROW_TRACK, 0, 3},
+-    {ROW_CLOCK, 0, 0},
+ };
+ 
+ /* PROJECT: the four slots the project is kept in */
+@@ -169,8 +168,6 @@ static void copy(char *d, const char *s, uint32_t max)
+ }
+ 
+ /* --- the rows' values --- */
+-static const char *const GEN_NAME[] = {"STEP", "TURING", "EUCLID", "MARKOV", "MORPH", "ATLAS", "BOUNCE", "AWAKE",
+-                                       "POLY", "QUAD", "CONSTL", "SERIES", "CHORD", "ANSWER"};
+ 
+ /* a row's label and its value, as text */
+ static void ui_row_text(const UiRow *row, char *label, char *value)
+@@ -188,9 +185,8 @@ static void ui_row_text(const UiRow *row, char *label, char *value)
+         snprintf(value, 8, "%d", (int)oc_tempo());
+         return;
+     case ROW_TRACK: {
+-        uint8_t gen = oc_track_generator(row->arg);
+         snprintf(label, 12, "TRACK %u", (unsigned)(row->arg + 1u));
+-        copy(value, gen < 14u ? GEN_NAME[gen] : "?", 8);
++        oc_gen_label(oc_track_generator(row->arg), value, 8);
+         return;
+     }
+     case ROW_CLOCK:
+@@ -294,6 +290,10 @@ static void ui_sample(void)
+ static uint32_t ui_draw_us, ui_draw_max_us, ui_flush_us, ui_flush_max_us;
+ static uint32_t ui_loop_max_us, ui_loop_last;
+ 
++/* OVERVIEW's gate history, shifted once a frame in ui_draw, never in the sampler */
++static uint16_t ui_hist[UI_LANES];
++static ui_overview_t ui_ov;
++
+ /* --- the screen --- */
+ static const char *const TAB_NAME[UI_TAB_COUNT] = {"GEN", "SCL", "CV", "MOD"};
+ static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRACK", "PROJECT", "INFO"};
+@@ -304,7 +304,7 @@ static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRA
+ static const char *ui_footer(uint32_t screen)
+ {
+     switch (screen) {
+-    case UI_SCR_OVERVIEW: return "L:ROW R:SET LL:MENU";
++    case UI_SCR_OVERVIEW: return "L TRK  R OPEN  RL MUTE";
+     case UI_SCR_TRACK:    return "L:ROW R:SET RB+RP:TAB";
+     case UI_SCR_PERFORM:  return "LEFT+RIGHT:BACK";
+     case UI_SCR_PROJECT:  return "RP:LOAD LP:BACK";
+@@ -320,7 +320,7 @@ static void ui_title(uint32_t screen, char *title, uint32_t size)
+         snprintf(title, size, "TRACK %s T%u %3d BPM", TAB_NAME[ui_nav.tab % UI_TAB_COUNT],
+                  (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
+     else if (screen == UI_SCR_OVERVIEW)
+-        snprintf(title, size, "HOME T%u %3d BPM", (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
++        snprintf(title, size, "OVERVIEW");
+     else
+         snprintf(title, size, "%s", screen == UI_SCR_PERFORM ? "PERFORM"
+                                           : screen == UI_SCR_PROJECT ? "PROJECT"
+@@ -358,11 +358,41 @@ static const char *const INFO_LABEL[6] = {"VERSION", "BLK MAX", "DRAW", "FLUSH",
+ void ui_draw(void)
+ {
+     uint32_t screen = ui_nav_screen(&ui_nav);
+-    uint32_t t0 = micros(), t1;
++    uint32_t t1;
+     uint32_t n = ui_rows_for(screen);
+     uint32_t cur = ui_nav.cursor[screen];
+     uint32_t i;
+ 
++    /* OVERVIEW's cursor is the selected track: L turn and RIGHT+L stay in step */
++    if (screen == UI_SCR_OVERVIEW)
++        ui_nav.cursor[UI_SCR_OVERVIEW] = oc_selected_track() % UI_LANES;
++
++    if (screen == UI_SCR_OVERVIEW) {
++        uint32_t i;
++        int16_t note;
++        ui_ov.playing = oc_playing();
++        ui_ov.ext = oc_clock_following();
++        ui_ov.sel = oc_selected_track() % UI_LANES;
++        ui_ov.tempo = oc_tempo();
++        ui_ov.footer = ui_footer(screen);
++        for (i = 0; i < UI_LANES; i++) {
++            oc_gen_label(oc_track_generator(i), ui_ov.lane[i].gen, sizeof ui_ov.lane[i].gen);
++            ui_ov.lane[i].muted = oc_track_muted(i) ? 1u : 0u;
++            ui_ov.lane[i].roll = oc_track_roll_pending(i) ? 1u : 0u;
++            note = oc_track_last_note(i);
++            if (note >= 0)
++                note = (int16_t)(note + oc_track_octave(i) * 12);
++            ui_note_text(note, ui_ov.lane[i].note, sizeof ui_ov.lane[i].note);
++            if (!ui_ov.lane[i].muted)
++                ui_hist[i] = ui_hist_shift(ui_hist[i], oc_track_gate_seen(i));
++            else
++                (void)oc_track_gate_seen(i);   /* drop the flag; the strip stays empty */
++            ui_ov.lane[i].hist = ui_hist[i];
++        }
++        t1 = micros();
++        ui_overview_draw(&ui_gfx, &ui_ov);
++    } else {
++
+     ui_screen.title = ui_title_buf;
+     ui_screen.footer = ui_footer(screen);
+     ui_screen.nrows = 0;
+@@ -397,7 +427,8 @@ void ui_draw(void)
+         /* the perform screen: the four tracks, for now */
+         for (i = 0; i < 4u; i++) {
+             uint8_t gen = oc_track_generator(i);
+-            snprintf(ui_label_buf[i], UI_LABEL_MAX, "T%u %s", (unsigned)(i + 1u), gen < 14u ? GEN_NAME[gen] : "?");
++            oc_gen_label(gen, ui_value_buf[i], UI_VALUE_MAX);
++            snprintf(ui_label_buf[i], UI_LABEL_MAX, "T%u %s", (unsigned)(i + 1u), ui_value_buf[i]);
+             ui_screen.rows[i].label = ui_label_buf[i];
+             ui_screen.rows[i].value = 0;
+         }
+@@ -431,6 +462,7 @@ void ui_draw(void)
+ 
+     t1 = micros();
+     oc_screen_draw(&ui_gfx, &ui_screen);
++    }
+     {
+         uint32_t t2 = micros();
+         oc_display_flush();
+@@ -517,7 +549,9 @@ static void ui_apply(const ui_action_t *a, uint32_t screen)
+             oc_load(row->arg);         /* the drive is read only: load, no save */
+         return;
+     case UI_ACT_CONTEXT:
+-        if (screen == UI_SCR_TRACK && row)
++        if (screen == UI_SCR_OVERVIEW)
++            oc_track_set_mute(oc_selected_track(), oc_track_muted(oc_selected_track()) ? 0 : 1);
++        else if (screen == UI_SCR_TRACK && row)
+             ui_row_default(row);
+         return;
+     default:
+diff --git a/firmware/oc_ui_parts.c b/firmware/oc_ui_parts.c
+index e0615bb..9f68443 100644
+--- a/firmware/oc_ui_parts.c
++++ b/firmware/oc_ui_parts.c
+@@ -7,3 +7,4 @@
+ #include "../parts/oc_ui_nav.c"
+ #include "../parts/oc_ui_gfx.c"
+ #include "../parts/oc_ui_screen.c"
++#include "../parts/oc_ui_overview.c"
+diff --git a/parts/oc_out.c b/parts/oc_out.c
+index 0526bca..c97a852 100644
+--- a/parts/oc_out.c
++++ b/parts/oc_out.c
+@@ -54,6 +54,33 @@ static uint32_t oc_gate_until[NTRK];       /* the tick a gate falls at (the acce
+ static uint8_t oc_vel[NTRK];               /* the last note's velocity */
+ static int32_t oc_pit[NTRK];               /* the cords' pitch, in 1/16 semitones */
+ 
++/* OVERVIEW's live values: one store in the tick, the UI reads them in loop() */
++static volatile uint8_t oc_gate_on[NTRK];
++static volatile uint8_t oc_gate_seen_flag[NTRK];
++static volatile int16_t oc_last_note[NTRK] = {-1, -1, -1, -1};
++
++static void oc_gate_out(uint32_t part, uint32_t on)
++{
++    if (part < NTRK)
++        oc_gate_on[part] = on ? 1u : 0u;
++    oc_gate_write(part, on);
++}
++
++int16_t oc_track_last_note(uint32_t tr)
++{
++    return tr < NTRK ? oc_last_note[tr] : (int16_t)-1;
++}
++
++uint8_t oc_track_gate_seen(uint32_t tr)
++{
++    uint8_t v;
++    if (tr >= NTRK)
++        return 0;
++    v = (uint8_t)(oc_gate_seen_flag[tr] | oc_gate_on[tr]);
++    oc_gate_seen_flag[tr] = 0;
++    return v;
++}
++
+ /* the mode is the track's own parameter (the port's engine's P_E4), so the
+  * cords can move it like any other */
+ uint32_t oc_out_mode(uint32_t part)
+@@ -104,12 +131,14 @@ static void oc_note_on(uint32_t part, uint32_t note, uint32_t vel)
+     (void)vel;
+     if (part >= NPART)
+         return;
++    oc_last_note[part] = (int16_t)note;
++    oc_gate_seen_flag[part] = 1;
+     oc_cv_write(part, (uint32_t)oc_cv_pitch(part, note));
+     if (oc_out_mode(part) == OC_OUT_TRIG) {
+         oc_trig_until[part] = oc_ticks() + OC_TRIG_TICKS;  /* a pulse at the note's onset */
+-        oc_gate_write(part, 1);
++        oc_gate_out(part, 1);
+     } else if (oc_out_mode(part) != OC_OUT_CLOCK) {
+-        oc_gate_write(part, 1);
++        oc_gate_out(part, 1);
+     }
+ }
+ 
+@@ -135,7 +164,7 @@ static void oc_note_off(uint32_t part, uint32_t note)
+             oc_gate_until[part] = oc_ticks() + extra;
+             return;
+         }
+-        oc_gate_write(part, 0);
++        oc_gate_out(part, 0);
+     }
+ }
+ 
+@@ -147,11 +176,11 @@ void oc_out_tick(void)
+     for (i = 0; i < NTRK; i++) {
+         if (oc_out_mode(i) == OC_OUT_TRIG && oc_trig_until[i] && now >= oc_trig_until[i]) {
+             oc_trig_until[i] = 0;
+-            oc_gate_write(i, 0);
++            oc_gate_out(i, 0);
+         }
+         if (oc_gate_until[i] && now >= oc_gate_until[i]) {   /* the accent's gate */
+             oc_gate_until[i] = 0;
+-            oc_gate_write(i, 0);
++            oc_gate_out(i, 0);
+         }
+     }
+ }
+diff --git a/parts/oc_ui_overview.c b/parts/oc_ui_overview.c
+new file mode 100644
+index 0000000..4950872
+--- /dev/null
++++ b/parts/oc_ui_overview.c
+@@ -0,0 +1,106 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * Copyright (C) 2026 Yakov Khalinsky */
++/* OVERVIEW's lanes (UI-PLAN.md §4.1, phase 3). */
++#include <stdio.h>
++#include <string.h>
++
++#include "oc_ui_overview.h"
++
++static const char *const NOTE_NAME[12] = {
++    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
++
++void ui_note_text(int16_t midi, char *out, uint32_t n)
++{
++    int32_t v, oct;
++    if (!out || !n)
++        return;
++    out[0] = 0;
++    if (midi < 0) {
++        (void)snprintf(out, n, "--");
++        return;
++    }
++    v = midi;
++    if (v > 120)
++        v = 120;
++    oct = (v / 12) - 1;             /* MIDI 36 = C2 */
++    (void)snprintf(out, n, "%s%d", NOTE_NAME[v % 12], (int)oct);
++}
++
++uint16_t ui_hist_shift(uint16_t hist, int on)
++{
++    return (uint16_t)((hist << 1) | (on ? 1u : 0u));
++}
++
++/* the header: the transport, the tempo or "---", the clock, the track,
++ * and OVERVIEW, knocked out of the lit bar */
++static void ui_ov_header(oc_gfx_t *g, const ui_overview_t *o)
++{
++    char title[32];
++    unsigned tr = (unsigned)((o->sel % UI_LANES) + 1u);
++    if (o->ext)
++        snprintf(title, sizeof title, "%c --- EXT T%u OVERVIEW", o->playing ? '>' : ' ', tr);
++    else
++        snprintf(title, sizeof title, "%c %3d INT T%u OVERVIEW", o->playing ? '>' : ' ',
++                 (int)o->tempo, tr);
++    oc_gfx_text5x7(g, 2, UI_HDR_TEXT_Y, title);
++    oc_gfx_invert_rect(g, 0, UI_HDR_Y, UI_FB_W, UI_HDR_H);
++}
++
++/* the ROLL flag: a wave five pixels wide and three tall (the 5 x 7 face has
++ * no ~, and the 3 x 5 one is too small to read beside the 5 x 7 text) */
++static void ui_ov_tilde(oc_gfx_t *g, int16_t x, int16_t y)
++{
++    oc_gfx_px(g, (int16_t)(x + 1), y, 1);
++    oc_gfx_px(g, (int16_t)(x + 2), y, 1);
++    oc_gfx_px(g, x, (int16_t)(y + 1), 1);
++    oc_gfx_px(g, (int16_t)(x + 3), (int16_t)(y + 1), 1);
++    oc_gfx_px(g, (int16_t)(x + 3), (int16_t)(y + 2), 1);
++    oc_gfx_px(g, (int16_t)(x + 4), (int16_t)(y + 2), 1);
++}
++
++/* one lane: the track number, the generator, the note, M/~ and the strip */
++static void ui_ov_lane(oc_gfx_t *g, uint32_t i, const ui_lane_t *l, int selected)
++{
++    int16_t y = (int16_t)(UI_BODY_Y + (int32_t)i * UI_LANE_H);
++    int16_t ty = (int16_t)(y + 2);
++    char num[2];
++    uint32_t b, x;
++
++    num[0] = (char)('1' + (int)i);
++    num[1] = 0;
++    oc_gfx_text5x7(g, 2, ty, num);
++    oc_gfx_text5x7(g, 12, ty, l->gen[0] ? l->gen : "?");
++    oc_gfx_text5x7(g, 52, ty, l->note[0] ? l->note : "--");
++    if (l->muted)
++        oc_gfx_text5x7(g, 72, ty, "M");
++    else if (l->roll)
++        ui_ov_tilde(g, 72, (int16_t)(ty + 2));
++
++    /* 16 cells at the right: 2 pixels wide, 1 pixel between, 7 tall.
++     * A sounding cell is filled; an empty one is a 2-pixel tick at the foot.
++     * A muted lane keeps the cells empty. */
++    x = 81u;
++    for (b = 0; b < UI_HIST_BITS; b++) {
++        int on = !l->muted && (l->hist & (uint16_t)(1u << (UI_HIST_BITS - 1u - b)));
++        if (on)
++            oc_gfx_fill_rect(g, (int16_t)x, ty, 2, UI_CH_H, 1);
++        else
++            oc_gfx_fill_rect(g, (int16_t)x, (int16_t)(ty + UI_CH_H - 1), 2, 1, 1);
++        x += 3u;
++    }
++    if (selected)
++        oc_gfx_invert_rect(g, 0, y, UI_FB_W, UI_LANE_H);
++}
++
++void ui_overview_draw(oc_gfx_t *g, const ui_overview_t *o)
++{
++    uint32_t i;
++    oc_gfx_clear(g);
++    if (!o)
++        return;
++    ui_ov_header(g, o);
++    for (i = 0; i < UI_LANES; i++)
++        ui_ov_lane(g, i, &o->lane[i], o->sel == i);
++    if (o->footer)
++        oc_gfx_text3x5(g, 2, UI_FTR_TEXT_Y, o->footer);
++}
+diff --git a/parts/oc_ui_overview.h b/parts/oc_ui_overview.h
+new file mode 100644
+index 0000000..249a1af
+--- /dev/null
++++ b/parts/oc_ui_overview.h
+@@ -0,0 +1,54 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * Copyright (C) 2026 Yakov Khalinsky */
++/* OVERVIEW's lanes (UI-PLAN.md §4.1, phase 3): the note name, the gate
++ * history and the four-lane screen, pure C so the host can check them. */
++#ifndef OC_UI_OVERVIEW_H_
++#define OC_UI_OVERVIEW_H_
++
++#include <stdint.h>
++#include "oc_ui_gfx.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define UI_LANES 4u
++#define UI_LANE_H 11                /* four lanes and three 0-pixel gaps fill the body */
++#define UI_HIST_BITS 16u
++
++/* a lane, as the shell describes it */
++typedef struct {
++    char gen[8];                    /* the engine's own name (oc_tx_desc, TX_MODE) */
++    char note[6];                   /* "C2", "D#3", or "--" if there is none */
++    uint16_t hist;                  /* 16 cells, bit 0 is the newest (the right) */
++    uint8_t muted;                  /* 1: show M and an empty strip */
++    uint8_t roll;                   /* 1: a ROLL is waiting for the next bar (~) */
++} ui_lane_t;
++
++/* the OVERVIEW screen: the header's transport and the four lanes */
++typedef struct {
++    uint8_t playing;
++    uint8_t ext;                    /* 1: the clock follows TR1; the tempo is "---" */
++    uint8_t sel;                    /* the selected track, 0..3 */
++    int16_t tempo;
++    ui_lane_t lane[UI_LANES];
++    const char *footer;
++} ui_overview_t;
++
++/* the current note, as text: MIDI 36 is C2 (the CV's 0 V). -1 is "--".
++ * Below 0 or above 120 is clamped (the CV's span is MIDI 0..120). */
++void ui_note_text(int16_t midi, char *out, uint32_t n);
++
++/* one frame of the history: the new bit goes in on the right, the oldest
++ * falls off the left. */
++uint16_t ui_hist_shift(uint16_t hist, int on);
++
++/* the OVERVIEW screen, drawn on the grid: the header bar, four 11-pixel
++ * lanes (the selected one inverted), the 16-cell strip, the footer. */
++void ui_overview_draw(oc_gfx_t *g, const ui_overview_t *o);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+diff --git a/parts/oc_view.c b/parts/oc_view.c
+index c7d8ffe..6b2c8b7 100644
+--- a/parts/oc_view.c
++++ b/parts/oc_view.c
+@@ -176,3 +176,41 @@ void oc_set_generator(uint32_t tr, int32_t mode)
+         mode = 13;
+     tessera_param_set(tr, TX_MODE, mode);
+ }
++
++void oc_gen_label(uint32_t gen, char *buf, uint32_t n)
++{
++    const param_desc_t *d = oc_tx_desc(TX_MODE);
++    uint32_t i = 0;
++    const char *name;
++    if (!buf || !n)
++        return;
++    if (d && d->names && gen <= (uint32_t)d->max && d->names[gen])
++        name = d->names[gen];
++    else
++        name = "?";
++    for (; i + 1u < n && name[i]; i++)
++        buf[i] = name[i];
++    buf[i] = 0;
++}
++
++int oc_track_muted(uint32_t tr)
++{
++    return tr < NTRK && trk[tr].p[P_MUTE] != 0;
++}
++
++void oc_track_set_mute(uint32_t tr, int on)
++{
++    if (tr < NTRK)
++        oc_track_param_set(tr, P_MUTE, on ? 1 : 0);
++}
++
++int oc_track_roll_pending(uint32_t tr)
++{
++    return tr < TESSERA_TRACKS && tessera.roll[tr] != 0;
++}
++
++void oc_track_set_roll(uint32_t tr, uint16_t v)
++{
++    if (tr < TESSERA_TRACKS)
++        tessera.roll[tr] = v;
++}
+diff --git a/tests/oc_ui_overview_test.c b/tests/oc_ui_overview_test.c
+new file mode 100644
+index 0000000..82137e8
+--- /dev/null
++++ b/tests/oc_ui_overview_test.c
+@@ -0,0 +1,60 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * Copyright (C) 2026 Yakov Khalinsky */
++/* OVERVIEW's helpers: the note name and the gate history (UI-PLAN §4.1). */
++#include <stdio.h>
++#include <string.h>
++#include "oc_ui_overview.h"
++
++static int checks, failures;
++
++static void check(const char *what, int ok)
++{
++    checks++;
++    if (!ok)
++        failures++;
++    printf("oc_overview: %-72s %s\n", what, ok ? "ok" : "FAIL");
++}
++
++static void check_note(void)
++{
++    char b[8];
++    ui_note_text(36, b, sizeof b);
++    check("note: MIDI 36 is C2 (the CV's 0 V)", strcmp(b, "C2") == 0);
++    ui_note_text(51, b, sizeof b);
++    check("note: MIDI 51 is D#3", strcmp(b, "D#3") == 0);
++    ui_note_text(0, b, sizeof b);
++    check("note: MIDI 0 is C-1", strcmp(b, "C-1") == 0);
++    ui_note_text(-1, b, sizeof b);
++    check("note: none is --", strcmp(b, "--") == 0);
++    ui_note_text(-20, b, sizeof b);
++    check("note: below none is still --", strcmp(b, "--") == 0);
++    ui_note_text(120, b, sizeof b);
++    check("note: MIDI 120 is C9, the top of the CV", strcmp(b, "C9") == 0);
++    ui_note_text(127, b, sizeof b);
++    check("note: above 120 clamps to C9", strcmp(b, "C9") == 0);
++    ui_note_text(60, b, 0);
++    check("note: a zero buffer is left alone", 1);
++}
++
++static void check_hist(void)
++{
++    uint16_t h = 0;
++    int i;
++    h = ui_hist_shift(h, 1);
++    check("hist: the first bit lands on the right", h == 1u);
++    h = ui_hist_shift(h, 0);
++    check("hist: a silent frame shifts a zero in", h == 2u);
++    for (i = 0; i < 14; i++)
++        h = ui_hist_shift(h, 1);
++    check("hist: 16 cells, the oldest still there", h == 0xBFFFu);
++    h = ui_hist_shift(h, 0);
++    check("hist: the 17th frame drops the oldest bit", h == 0x7FFEu);
++}
++
++int main(void)
++{
++    check_note();
++    check_hist();
++    printf("oc_overview: %d checks, %d failing\n", checks, failures);
++    return failures ? 1 : 0;
++}
+diff --git a/tools/build_host.sh b/tools/build_host.sh
+index c6f248c..48c2c6c 100755
+--- a/tools/build_host.sh
++++ b/tools/build_host.sh
+@@ -76,9 +76,11 @@ cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_nav_test" tests/oc_
+ # the UI's drawing kit (parts/oc_ui_gfx.c) and the grid (parts/oc_ui_screen.c):
+ # the primitives, the two faces and the shape of a screen
+ cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_gfx_test" tests/oc_ui_gfx_test.c parts/oc_ui_gfx.c parts/oc_ui_screen.c
++# OVERVIEW's note name and gate history (parts/oc_ui_overview.c)
++cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_overview_test" tests/oc_ui_overview_test.c parts/oc_ui_overview.c parts/oc_ui_gfx.c
+ 
+ [ "$1" = build ] && exit 0
+ 
+ # the baseline is the FM-1's: the port must play exactly what the FM-1 plays
+ "$OUT/oc_engine_test" "$TESSERA/tests/tessera_baseline.txt" build/oc_log || exit 1
+-"$OUT/oc_port_test" && "$OUT/oc_ui_test" && "$OUT/oc_ui_nav_test" && exec "$OUT/oc_ui_gfx_test"
++"$OUT/oc_port_test" && "$OUT/oc_ui_test" && "$OUT/oc_ui_nav_test" && "$OUT/oc_ui_overview_test" && exec "$OUT/oc_ui_gfx_test"
+diff --git a/tools/render_screens/rs_main.cpp b/tools/render_screens/rs_main.cpp
+index 68c7f31..680a401 100644
+--- a/tools/render_screens/rs_main.cpp
++++ b/tools/render_screens/rs_main.cpp
+@@ -37,7 +37,9 @@ struct oc_pinout oc_pins = OC_PINOUT_PLAIN;
+ uint32_t oc_cal_flags;
+ uint8_t oc_cal_display_offset = 2;
+ volatile uint8_t oc_spi_busy, oc_spi_pending;
+-extern "C" uint8_t oc_clock_following(void) { return 0; }   /* INT */
++static uint8_t rs_clock_ext;
++extern "C" uint8_t oc_clock_following(void) { return rs_clock_ext; }
++
+ extern "C" bool oc_storage_ok(void) { return true; }        /* the drive is there, read only */
+ extern "C" int oc_slot_used(uint32_t slot) { return slot == 0u; }
+ extern "C" int oc_save(uint32_t slot) { (void)slot; return -1; }
+@@ -323,13 +325,38 @@ int main(int argc, char **argv)
+     failed |= save_png(out_dir, "screen-splash.png");
+ 
+     /* HOME: a power-on with nothing saved (the module composes: four
+-     * generators, playing), the cursor on the first row */
++     * generators, playing). oc_transport only queues the start; one control
++     * block latches song.playing so the header shows the play mark, without
++     * waiting for a first note. */
+     oc_engine_init();
+     oc_power_on();
++    oc_clock_advance(32);                 /* CTL, one events_block */
+     ui_init();
+     ui_draw();
+     failed |= save_png(out_dir, "screen-home.png");
+ 
++    /* OVERVIEW's other states (phase 3): track 2 selected, track 3 muted,
++     * following TR1, and a ROLL waiting on track 4 */
++    oc_select_track(1);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-overview-t2.png");
++    oc_select_track(2);
++    oc_track_set_mute(2, 1);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-overview-mute.png");
++    oc_track_set_mute(2, 0);
++    oc_select_track(0);
++    rs_clock_ext = 1;
++    ui_draw();
++    failed |= save_png(out_dir, "screen-overview-ext.png");
++    rs_clock_ext = 0;
++    oc_select_track(3);
++    oc_track_set_roll(3, 1);
++    ui_draw();
++    failed |= save_png(out_dir, "screen-overview-roll.png");
++    oc_track_set_roll(3, 0);
++    oc_select_track(0);
++
+     /* the shell's other screens (phase 1c), opened as the router opens them:
+      * the screen menu, TRACK on its GEN tab (track 1), PERFORM, PROJECT and
+      * INFO (the timings read 0 on the host) */
