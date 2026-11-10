@@ -31,6 +31,7 @@
 #include "oc_version.h"
 #include "../parts/oc_ui_input.h"
 #include "../parts/oc_ui_nav.h"
+#include "../parts/oc_ui_overview.h"
 #include "../parts/oc_ui_screen.h"
 
 /* --- the display, the platform's side --- */
@@ -71,11 +72,9 @@ struct UiRow {
 };
 
 
-/* OVERVIEW (HOME): the tempo, the four tracks, the clock */
+/* OVERVIEW: four track lanes; tempo and the clock source live in the header */
 static const UiRow PAGE_HOME[] = {
-    {ROW_TEMPO, 0, 0},
     {ROW_TRACK, 0, 0}, {ROW_TRACK, 0, 1}, {ROW_TRACK, 0, 2}, {ROW_TRACK, 0, 3},
-    {ROW_CLOCK, 0, 0},
 };
 
 /* PROJECT: the four slots the project is kept in */
@@ -169,8 +168,6 @@ static void copy(char *d, const char *s, uint32_t max)
 }
 
 /* --- the rows' values --- */
-static const char *const GEN_NAME[] = {"STEP", "TURING", "EUCLID", "MARKOV", "MORPH", "ATLAS", "BOUNCE", "AWAKE",
-                                       "POLY", "QUAD", "CONSTL", "SERIES", "CHORD", "ANSWER"};
 
 /* a row's label and its value, as text */
 static void ui_row_text(const UiRow *row, char *label, char *value)
@@ -188,9 +185,8 @@ static void ui_row_text(const UiRow *row, char *label, char *value)
         snprintf(value, 8, "%d", (int)oc_tempo());
         return;
     case ROW_TRACK: {
-        uint8_t gen = oc_track_generator(row->arg);
         snprintf(label, 12, "TRACK %u", (unsigned)(row->arg + 1u));
-        copy(value, gen < 14u ? GEN_NAME[gen] : "?", 8);
+        oc_gen_label(oc_track_generator(row->arg), value, 8);
         return;
     }
     case ROW_CLOCK:
@@ -294,6 +290,10 @@ static void ui_sample(void)
 static uint32_t ui_draw_us, ui_draw_max_us, ui_flush_us, ui_flush_max_us;
 static uint32_t ui_loop_max_us, ui_loop_last;
 
+/* OVERVIEW's gate history, shifted once a frame in ui_draw, never in the sampler */
+static uint16_t ui_hist[UI_LANES];
+static ui_overview_t ui_ov;
+
 /* --- the screen --- */
 static const char *const TAB_NAME[UI_TAB_COUNT] = {"GEN", "SCL", "CV", "MOD"};
 static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRACK", "PROJECT", "INFO"};
@@ -304,7 +304,7 @@ static const char *const MENU_NAME[UI_MENU_ITEMS] = {"OVERVIEW", "PERFORM", "TRA
 static const char *ui_footer(uint32_t screen)
 {
     switch (screen) {
-    case UI_SCR_OVERVIEW: return "L:ROW R:SET LL:MENU";
+    case UI_SCR_OVERVIEW: return "L TRK  R OPEN  RL MUTE";
     case UI_SCR_TRACK:    return "L:ROW R:SET RB+RP:TAB";
     case UI_SCR_PERFORM:  return "LEFT+RIGHT:BACK";
     case UI_SCR_PROJECT:  return "RP:LOAD LP:BACK";
@@ -320,7 +320,7 @@ static void ui_title(uint32_t screen, char *title, uint32_t size)
         snprintf(title, size, "TRACK %s T%u %3d BPM", TAB_NAME[ui_nav.tab % UI_TAB_COUNT],
                  (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
     else if (screen == UI_SCR_OVERVIEW)
-        snprintf(title, size, "HOME T%u %3d BPM", (unsigned)(oc_selected_track() + 1u), (int)oc_tempo());
+        snprintf(title, size, "OVERVIEW");
     else
         snprintf(title, size, "%s", screen == UI_SCR_PERFORM ? "PERFORM"
                                           : screen == UI_SCR_PROJECT ? "PROJECT"
@@ -358,10 +358,40 @@ static const char *const INFO_LABEL[6] = {"VERSION", "BLK MAX", "DRAW", "FLUSH",
 void ui_draw(void)
 {
     uint32_t screen = ui_nav_screen(&ui_nav);
-    uint32_t t0 = micros(), t1;
+    uint32_t t1;
     uint32_t n = ui_rows_for(screen);
     uint32_t cur = ui_nav.cursor[screen];
     uint32_t i;
+
+    /* OVERVIEW's cursor is the selected track: L turn and RIGHT+L stay in step */
+    if (screen == UI_SCR_OVERVIEW)
+        ui_nav.cursor[UI_SCR_OVERVIEW] = oc_selected_track() % UI_LANES;
+
+    if (screen == UI_SCR_OVERVIEW) {
+        uint32_t i;
+        int16_t note;
+        ui_ov.playing = oc_playing();
+        ui_ov.ext = oc_clock_following();
+        ui_ov.sel = oc_selected_track() % UI_LANES;
+        ui_ov.tempo = oc_tempo();
+        ui_ov.footer = ui_footer(screen);
+        for (i = 0; i < UI_LANES; i++) {
+            oc_gen_label(oc_track_generator(i), ui_ov.lane[i].gen, sizeof ui_ov.lane[i].gen);
+            ui_ov.lane[i].muted = oc_track_muted(i) ? 1u : 0u;
+            ui_ov.lane[i].roll = oc_track_roll_pending(i) ? 1u : 0u;
+            note = oc_track_last_note(i);
+            if (note >= 0)
+                note = (int16_t)(note + oc_track_octave(i) * 12);
+            ui_note_text(note, ui_ov.lane[i].note, sizeof ui_ov.lane[i].note);
+            if (!ui_ov.lane[i].muted)
+                ui_hist[i] = ui_hist_shift(ui_hist[i], oc_track_gate_seen(i));
+            else
+                (void)oc_track_gate_seen(i);   /* drop the flag; the strip stays empty */
+            ui_ov.lane[i].hist = ui_hist[i];
+        }
+        t1 = micros();
+        ui_overview_draw(&ui_gfx, &ui_ov);
+    } else {
 
     ui_screen.title = ui_title_buf;
     ui_screen.footer = ui_footer(screen);
@@ -397,7 +427,8 @@ void ui_draw(void)
         /* the perform screen: the four tracks, for now */
         for (i = 0; i < 4u; i++) {
             uint8_t gen = oc_track_generator(i);
-            snprintf(ui_label_buf[i], UI_LABEL_MAX, "T%u %s", (unsigned)(i + 1u), gen < 14u ? GEN_NAME[gen] : "?");
+            oc_gen_label(gen, ui_value_buf[i], UI_VALUE_MAX);
+            snprintf(ui_label_buf[i], UI_LABEL_MAX, "T%u %s", (unsigned)(i + 1u), ui_value_buf[i]);
             ui_screen.rows[i].label = ui_label_buf[i];
             ui_screen.rows[i].value = 0;
         }
@@ -431,6 +462,7 @@ void ui_draw(void)
 
     t1 = micros();
     oc_screen_draw(&ui_gfx, &ui_screen);
+    }
     {
         uint32_t t2 = micros();
         oc_display_flush();
@@ -517,7 +549,9 @@ static void ui_apply(const ui_action_t *a, uint32_t screen)
             oc_load(row->arg);         /* the drive is read only: load, no save */
         return;
     case UI_ACT_CONTEXT:
-        if (screen == UI_SCR_TRACK && row)
+        if (screen == UI_SCR_OVERVIEW)
+            oc_track_set_mute(oc_selected_track(), oc_track_muted(oc_selected_track()) ? 0 : 1);
+        else if (screen == UI_SCR_TRACK && row)
             ui_row_default(row);
         return;
     default:

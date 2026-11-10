@@ -37,7 +37,9 @@ struct oc_pinout oc_pins = OC_PINOUT_PLAIN;
 uint32_t oc_cal_flags;
 uint8_t oc_cal_display_offset = 2;
 volatile uint8_t oc_spi_busy, oc_spi_pending;
-extern "C" uint8_t oc_clock_following(void) { return 0; }   /* INT */
+static uint8_t rs_clock_ext;
+extern "C" uint8_t oc_clock_following(void) { return rs_clock_ext; }
+
 extern "C" bool oc_storage_ok(void) { return true; }        /* the drive is there, read only */
 extern "C" int oc_slot_used(uint32_t slot) { return slot == 0u; }
 extern "C" int oc_save(uint32_t slot) { (void)slot; return -1; }
@@ -323,12 +325,37 @@ int main(int argc, char **argv)
     failed |= save_png(out_dir, "screen-splash.png");
 
     /* HOME: a power-on with nothing saved (the module composes: four
-     * generators, playing), the cursor on the first row */
+     * generators, playing). oc_transport only queues the start; one control
+     * block latches song.playing so the header shows the play mark, without
+     * waiting for a first note. */
     oc_engine_init();
     oc_power_on();
+    oc_clock_advance(32);                 /* CTL, one events_block */
     ui_init();
     ui_draw();
     failed |= save_png(out_dir, "screen-home.png");
+
+    /* OVERVIEW's other states (phase 3): track 2 selected, track 3 muted,
+     * following TR1, and a ROLL waiting on track 4 */
+    oc_select_track(1);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-overview-t2.png");
+    oc_select_track(2);
+    oc_track_set_mute(2, 1);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-overview-mute.png");
+    oc_track_set_mute(2, 0);
+    oc_select_track(0);
+    rs_clock_ext = 1;
+    ui_draw();
+    failed |= save_png(out_dir, "screen-overview-ext.png");
+    rs_clock_ext = 0;
+    oc_select_track(3);
+    oc_track_set_roll(3, 1);
+    ui_draw();
+    failed |= save_png(out_dir, "screen-overview-roll.png");
+    oc_track_set_roll(3, 0);
+    oc_select_track(0);
 
     /* the shell's other screens (phase 1c), opened as the router opens them:
      * the screen menu, TRACK on its GEN tab (track 1), PERFORM, PROJECT and

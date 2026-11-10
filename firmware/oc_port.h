@@ -97,6 +97,19 @@ uint32_t oc_out_mode(uint32_t part);
 /* the track's generator */
 void oc_set_generator(uint32_t tr, int32_t mode);
 
+/* OVERVIEW (phase 3): a generator's name from the engine's own descriptors
+ * (so there is no hand-copied table), the last note and the gate the UI
+ * sampled, mute, and a ROLL waiting for the next bar. The two "seen"
+ * values are set from the note path (one store, in the tick); the UI
+ * reads them in loop() and never from the sampler. */
+void oc_gen_label(uint32_t gen, char *buf, uint32_t n);
+int16_t oc_track_last_note(uint32_t tr);         /* MIDI note, or -1 if none */
+uint8_t oc_track_gate_seen(uint32_t tr);         /* gate on now, or a note since the last read; the flag is then cleared */
+int oc_track_muted(uint32_t tr);
+void oc_track_set_mute(uint32_t tr, int on);
+int oc_track_roll_pending(uint32_t tr);
+void oc_track_set_roll(uint32_t tr, uint16_t v); /* 0 = none; a non-zero value is the pending seed */
+
 /* the project: the state, packed and unpacked (the engine's), and the slots
  * it is kept in (the platform's storage) */
 uint32_t oc_project_pack(uint8_t *out, uint32_t max);

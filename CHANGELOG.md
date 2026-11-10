@@ -3,6 +3,13 @@
 The port's releases. The version is the one the firmware carries
 (`firmware/oc_version.h`); the splash on the module's screen shows it.
 
+## Unreleased
+
+### UI, phase 3: OVERVIEW's lanes
+- `firmware/oc_ui.cpp` / `parts/oc_ui_overview.c`: OVERVIEW is four lanes, one per track. The header carries the transport, the tempo (or `---` while the clock follows TR1), the clock source and the selected track. Each lane shows the engine's own generator name (the hand-copied `GEN_NAME[]` table is gone), the current note on the CV (`C2` is 0 V), a 16-cell gate history, mute (`M`) and a pending ROLL (`~`). The history is sampled in `ui_draw`, never in the 1 kHz sampler. L turn selects the lane, R turn changes the generator, R tap opens TRACK, R long mutes.
+- `parts/oc_out.c` / `parts/oc_view.c`: read-only accessors for the last note, a gate the UI has not yet consumed, mute and a pending ROLL. The two stores in the note path are one write each.
+- Host tests (`tests/oc_ui_overview_test.c`) for the note name and the history; goldens and pictures for the default, track 2 selected, track 3 muted, following TR1, and a ROLL on track 4. `docs/GUIDE.md` describes the lanes.
+
 ## v0.2.0 - UNTESTED ON HARDWARE until Yakov confirms it
 
 The first release with the new screen: the UI phases 1a to 2 (the input
