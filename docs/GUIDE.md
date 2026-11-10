@@ -28,12 +28,12 @@ LEFT is play / stop as calibrated.
 
 | Control or jack | What it does on `main` |
 |---|---|
-| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where the cursor on a `TRACK` row selects that track |
+| **L encoder, turn** | moves the cursor up and down the list (it wraps round). It never changes the track, except on OVERVIEW, where it selects the lane |
 | **L encoder, tap** | back: closes the screen shown (at OVERVIEW it does nothing) |
 | **L encoder, long press** (600 ms) | opens the screen menu |
 | **R encoder, turn** | changes the value in the row under the cursor. A fast turn takes bigger steps (2, 4 or 8 a detent) on a wide range; turned while pushed in it is one step a detent; a list of names is always one step |
-| **R encoder, tap** | enter: on an OVERVIEW `TRACK` row it opens TRACK; on PROJECT it loads the slot |
-| **R encoder, long press** | on TRACK: puts the row's value back to its default |
+| **R encoder, tap** | enter: on OVERVIEW it opens TRACK for the selected lane; on PROJECT it loads the slot |
+| **R encoder, long press** | on OVERVIEW: mutes or unmutes the selected lane. On TRACK: puts the row's value back to its default |
 | **LEFT button** (TOP in the code) | play / stop |
 | **RIGHT button** (BOTTOM in the code) | a tap restarts from the top. Held, it is a shift for the other controls (below). Held at power-on, it starts the **safe mode** |
 | **RIGHT + L turn** | selects the track (1 – 4, it wraps round), on every screen |
@@ -63,7 +63,8 @@ Every screen is the same shape, so the eye learns it once:
 - the **header** (the top nine rows): a lit bar with the title's letters cut
   out of it
 - the **body** (the next 47 rows): six rows of text, the row the cursor is on
-  lit, with its letters cut out of it too
+  lit, with its letters cut out of it too. OVERVIEW is the exception: four
+  lanes, eleven pixels each, the selected lane lit
 - the **footer** (the bottom eight rows): the screen's hints, in a smaller
   face
 
@@ -79,7 +80,7 @@ At power-on the module shows these screens in order:
    below). Otherwise, if the last boot stopped part of the way through, the
    module shows `RESET AT STAGE n` for five seconds.
 2. The **splash**: the module's name and the firmware's version.
-3. **OVERVIEW** (its top line says `HOME`). If nothing is saved, the module
+3. **OVERVIEW**. If nothing is saved, the module
    composes for itself: track 1 gets TURING, 2 gets EUCLID, 3 MARKOV and 4
    MORPH, an octave apart, and it plays.
 
@@ -87,17 +88,30 @@ At power-on the module shows these screens in order:
 
 ![OVERVIEW after a power-on with nothing saved](img/screen-home.png)
 
-The top line shows the selected track and the tempo. The bottom line is the
-footer. The row the cursor is on is the lit one.
+Four lanes, one per track. The header carries the transport (`>` while it
+plays), the tempo, the clock (`INT` or `EXT`), the selected track and the
+word OVERVIEW. While the clock follows TR1 the tempo is shown as `---`. The
+selected lane is the lit one.
 
-| Row | R encoder turn | R tap |
-|---|---|---|
-| `TEMPO` | the tempo, from 40 to 240 BPM (faster turns, bigger steps) | nothing |
-| `TRACK 1` – `TRACK 4` | changes that track's generator (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER). It stops at the ends of the list | opens TRACK for that track |
-| `CLOCK` | nothing: it only shows `INT` (the module's own tempo) or `EXT` (following TR1) | nothing |
+Each lane shows: the track number; the generator, named as the engine names
+it; the current note on the CV (`C2` is 0 V, `--` if there has been none);
+`M` if the track is muted, or `~` if a ROLL is waiting for the next bar;
+and a 16-cell strip of recent gates, filled when a gate was on (or a note
+started) in that frame. The strip is sampled when the screen is drawn, not
+by the controls' sampler. A muted lane shows an empty strip.
 
-When the L encoder's cursor lands on a `TRACK` row, that track becomes the
-selected one (`T1` – `T4` on the top line).
+![OVERVIEW, track 2 selected](img/screen-overview-t2.png)
+![OVERVIEW, track 3 muted](img/screen-overview-mute.png)
+![OVERVIEW, following TR1](img/screen-overview-ext.png)
+![OVERVIEW, a ROLL waiting on track 4](img/screen-overview-roll.png)
+
+| Control | What it does on OVERVIEW |
+|---|---|
+| L turn | selects the lane (and that track) |
+| R turn | changes that track's generator. The name is the engine's own (STEP, TURING, EUCLID, MARKOV, MORPH, ATLAS, BOUNCE, AWAKE, POLY, QUAD, CONSTL, SERIES, CHORD, ANSWER) |
+| R tap | opens TRACK for that track |
+| R long press | mutes or unmutes that track |
+| RIGHT + R turn | the tempo, 40 to 240 BPM (nothing while the clock follows TR1) |
 
 ## The screen menu
 

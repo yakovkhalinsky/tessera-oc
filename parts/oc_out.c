@@ -54,6 +54,33 @@ static uint32_t oc_gate_until[NTRK];       /* the tick a gate falls at (the acce
 static uint8_t oc_vel[NTRK];               /* the last note's velocity */
 static int32_t oc_pit[NTRK];               /* the cords' pitch, in 1/16 semitones */
 
+/* OVERVIEW's live values: one store in the tick, the UI reads them in loop() */
+static volatile uint8_t oc_gate_on[NTRK];
+static volatile uint8_t oc_gate_seen_flag[NTRK];
+static volatile int16_t oc_last_note[NTRK] = {-1, -1, -1, -1};
+
+static void oc_gate_out(uint32_t part, uint32_t on)
+{
+    if (part < NTRK)
+        oc_gate_on[part] = on ? 1u : 0u;
+    oc_gate_write(part, on);
+}
+
+int16_t oc_track_last_note(uint32_t tr)
+{
+    return tr < NTRK ? oc_last_note[tr] : (int16_t)-1;
+}
+
+uint8_t oc_track_gate_seen(uint32_t tr)
+{
+    uint8_t v;
+    if (tr >= NTRK)
+        return 0;
+    v = (uint8_t)(oc_gate_seen_flag[tr] | oc_gate_on[tr]);
+    oc_gate_seen_flag[tr] = 0;
+    return v;
+}
+
 /* the mode is the track's own parameter (the port's engine's P_E4), so the
  * cords can move it like any other */
 uint32_t oc_out_mode(uint32_t part)
@@ -104,12 +131,14 @@ static void oc_note_on(uint32_t part, uint32_t note, uint32_t vel)
     (void)vel;
     if (part >= NPART)
         return;
+    oc_last_note[part] = (int16_t)note;
+    oc_gate_seen_flag[part] = 1;
     oc_cv_write(part, (uint32_t)oc_cv_pitch(part, note));
     if (oc_out_mode(part) == OC_OUT_TRIG) {
         oc_trig_until[part] = oc_ticks() + OC_TRIG_TICKS;  /* a pulse at the note's onset */
-        oc_gate_write(part, 1);
+        oc_gate_out(part, 1);
     } else if (oc_out_mode(part) != OC_OUT_CLOCK) {
-        oc_gate_write(part, 1);
+        oc_gate_out(part, 1);
     }
 }
 
@@ -135,7 +164,7 @@ static void oc_note_off(uint32_t part, uint32_t note)
             oc_gate_until[part] = oc_ticks() + extra;
             return;
         }
-        oc_gate_write(part, 0);
+        oc_gate_out(part, 0);
     }
 }
 
@@ -147,11 +176,11 @@ void oc_out_tick(void)
     for (i = 0; i < NTRK; i++) {
         if (oc_out_mode(i) == OC_OUT_TRIG && oc_trig_until[i] && now >= oc_trig_until[i]) {
             oc_trig_until[i] = 0;
-            oc_gate_write(i, 0);
+            oc_gate_out(i, 0);
         }
         if (oc_gate_until[i] && now >= oc_gate_until[i]) {   /* the accent's gate */
             oc_gate_until[i] = 0;
-            oc_gate_write(i, 0);
+            oc_gate_out(i, 0);
         }
     }
 }

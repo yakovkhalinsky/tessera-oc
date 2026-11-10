@@ -176,3 +176,41 @@ void oc_set_generator(uint32_t tr, int32_t mode)
         mode = 13;
     tessera_param_set(tr, TX_MODE, mode);
 }
+
+void oc_gen_label(uint32_t gen, char *buf, uint32_t n)
+{
+    const param_desc_t *d = oc_tx_desc(TX_MODE);
+    uint32_t i = 0;
+    const char *name;
+    if (!buf || !n)
+        return;
+    if (d && d->names && gen <= (uint32_t)d->max && d->names[gen])
+        name = d->names[gen];
+    else
+        name = "?";
+    for (; i + 1u < n && name[i]; i++)
+        buf[i] = name[i];
+    buf[i] = 0;
+}
+
+int oc_track_muted(uint32_t tr)
+{
+    return tr < NTRK && trk[tr].p[P_MUTE] != 0;
+}
+
+void oc_track_set_mute(uint32_t tr, int on)
+{
+    if (tr < NTRK)
+        oc_track_param_set(tr, P_MUTE, on ? 1 : 0);
+}
+
+int oc_track_roll_pending(uint32_t tr)
+{
+    return tr < TESSERA_TRACKS && tessera.roll[tr] != 0;
+}
+
+void oc_track_set_roll(uint32_t tr, uint16_t v)
+{
+    if (tr < TESSERA_TRACKS)
+        tessera.roll[tr] = v;
+}

@@ -76,9 +76,11 @@ cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -o "$OUT/oc_ui_nav_test" tests/oc_
 # the UI's drawing kit (parts/oc_ui_gfx.c) and the grid (parts/oc_ui_screen.c):
 # the primitives, the two faces and the shape of a screen
 cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_gfx_test" tests/oc_ui_gfx_test.c parts/oc_ui_gfx.c parts/oc_ui_screen.c
+# OVERVIEW's note name and gate history (parts/oc_ui_overview.c)
+cc -O2 -std=c99 -Wall -Wextra -Werror -Iparts -I"$TESSERA/firmware/src" -o "$OUT/oc_ui_overview_test" tests/oc_ui_overview_test.c parts/oc_ui_overview.c parts/oc_ui_gfx.c
 
 [ "$1" = build ] && exit 0
 
 # the baseline is the FM-1's: the port must play exactly what the FM-1 plays
 "$OUT/oc_engine_test" "$TESSERA/tests/tessera_baseline.txt" build/oc_log || exit 1
-"$OUT/oc_port_test" && "$OUT/oc_ui_test" && "$OUT/oc_ui_nav_test" && exec "$OUT/oc_ui_gfx_test"
+"$OUT/oc_port_test" && "$OUT/oc_ui_test" && "$OUT/oc_ui_nav_test" && "$OUT/oc_ui_overview_test" && exec "$OUT/oc_ui_gfx_test"

@@ -1,0 +1,106 @@
+BUILD_HOST_EXIT=0
+render_screens: docs/img current
+goldens: tests/golden current
+oc_port: 41 checks, 0 failing
+oc_ui: 53 checks, 0 failing
+oc_nav: 47 checks, 0 failing
+oc_overview: 12 checks, 0 failing
+oc_gfx: 69 checks, 0 failing
+0
+PIO_EXIT=0
+teensy_size:   FLASH: code:121768, data:67460, headers:8400   free for files:1833988
+teensy_size:    RAM1: variables:162848, code:116504, padding:14568   free for local variables:230368
+teensy_size:    RAM2: variables:17568  free for malloc/new:506720
+SECTIONS_EXIT=0
+  the map is sound: nothing between _edata and _sbss, no orphan RAM
+the drive is opened for reading and nothing else
+READ_ONLY_EXIT=0
+WRITE_PATH_EXIT=0
+387:                ui_hist[i] = ui_hist_shift(ui_hist[i], oc_track_gate_seen(i));
+389:                (void)oc_track_gate_seen(i);   /* drop the flag; the strip stays empty */
+393:        ui_overview_draw(&ui_gfx, &ui_ov);
+1
+3
+0
+1
+1
+1
+1
+1
+1
+c582ce06ea2cf40c611711c61956d97e  CHANGELOG.md
+6de46323c744a7dbe4f3b22d1f5cb6c5  docs/GUIDE.md
+34d05b244c5d6f9a612d2c5d01ea568f  firmware/oc_port.h
+8792ad35f5a4a714d3609c42eea81f19  firmware/oc_ui.cpp
+861b57b3e532c962a51804a4c5da9fa5  firmware/oc_ui_parts.c
+e99403cd965cfaf9fde3aad6b0f6ef9f  parts/oc_out.c
+45e9cc6bfa31aadc879ede5fda4472f2  parts/oc_ui_overview.c
+85821819df1bb9ab12821f2a05fb6125  parts/oc_ui_overview.h
+a808799934d686116f8cdb1b5a767a64  parts/oc_view.c
+98831500e41923dbf994b23405998281  tests/oc_ui_overview_test.c
+bd7436789c4c7cfb13e229d78e5ea6b2  tools/build_host.sh
+4dbfbdf69431b73a0217f91f6e85b1b1  tools/render_screens/rs_main.cpp
+153c57c2144eb17598036b986a923eef  docs/img/screen-crash-1.png
+ce96c4d3977b3220b24b7b6d5853ae4d  docs/img/screen-crash-2.png
+45c3a15db309685c3d1902b41dca57e6  docs/img/screen-home.png
+a65f51ffa6b358af464d8e7c82d2dba5  docs/img/screen-info.png
+d4348b3f070c07cda6a3e0f30c944a9b  docs/img/screen-menu.png
+c3cdbb924b21a24b8d38acaa9e49bd90  docs/img/screen-overview-ext.png
+30ec1d598545ff3a44ed21779b0d49f3  docs/img/screen-overview-mute.png
+23af3549eed2e5f313c521d4ee57bbeb  docs/img/screen-overview-roll.png
+1fc744c6fc8f3a7dba7392da40e040c3  docs/img/screen-overview-t2.png
+6af87aae33b9ed586478ea7ab58894c7  docs/img/screen-perform.png
+a5e33825758b8ba4c9aab3684d56bac5  docs/img/screen-project.png
+ed414c32883f49ef3bcfebbcc0db7de3  docs/img/screen-reset.png
+3348ccdddc5b70510a54fc917ad7a5f8  docs/img/screen-safe-mode.png
+64fbd30806fb37b306d966efb3d69d55  docs/img/screen-splash.png
+cdcbc9833a61d57dab6cc7aee6343f08  docs/img/screen-track.png
+a58ae0c5c172c35423323b66aac1da2a  tests/golden/screen-crash-1.txt
+15d4ef2974b228c8b85cc4c91cbbbc94  tests/golden/screen-crash-2.txt
+fbe2be41d7eaae3437dec04ffa7748a2  tests/golden/screen-home.txt
+8863fb2b4075e5e045c124d2c1753d19  tests/golden/screen-info.txt
+7ddea609a71b1b0e66bf005f439e6b25  tests/golden/screen-menu.txt
+661e12585f1e21a21b5a7cc39371fd1d  tests/golden/screen-overview-ext.txt
+4e573965f371d04634f44443aa83c433  tests/golden/screen-overview-mute.txt
+042f79c3724d4d39f537ff16942fc6d4  tests/golden/screen-overview-roll.txt
+3ca1d1bf3fd81671242ce4fc03a8b21e  tests/golden/screen-overview-t2.txt
+986b4c42b16dc14bb41be7e91e85e54a  tests/golden/screen-perform.txt
+b5b402c32ea2a5bd411315cf43786dd5  tests/golden/screen-project.txt
+de9fa5e263c69a04cb60a5de782554cf  tests/golden/screen-reset.txt
+035e5dc1545255a3d37bd117508417f2  tests/golden/screen-safe-mode.txt
+b67ffe9847046873ad9f71c3d6358c26  tests/golden/screen-splash.txt
+255e462d1ce703ad2701821de4cf1524  tests/golden/screen-track.txt
+PINNED_UNCHANGED_EXIT=0
+7	0	CHANGELOG.md
+28	14	docs/GUIDE.md
+-	-	docs/img/screen-home.png
+13	0	firmware/oc_port.h
+46	12	firmware/oc_ui.cpp
+1	0	firmware/oc_ui_parts.c
+34	5	parts/oc_out.c
+38	0	parts/oc_view.c
+61	61	tests/golden/screen-home.txt
+3	1	tools/build_host.sh
+29	2	tools/render_screens/rs_main.cpp
+ M CHANGELOG.md
+ M docs/GUIDE.md
+ M docs/img/screen-home.png
+ M firmware/oc_port.h
+ M firmware/oc_ui.cpp
+ M firmware/oc_ui_parts.c
+ M parts/oc_out.c
+ M parts/oc_view.c
+ M tests/golden/screen-home.txt
+ M tools/build_host.sh
+ M tools/render_screens/rs_main.cpp
+?? docs/img/screen-overview-ext.png
+?? docs/img/screen-overview-mute.png
+?? docs/img/screen-overview-roll.png
+?? docs/img/screen-overview-t2.png
+?? parts/oc_ui_overview.c
+?? parts/oc_ui_overview.h
+?? tests/golden/screen-overview-ext.txt
+?? tests/golden/screen-overview-mute.txt
+?? tests/golden/screen-overview-roll.txt
+?? tests/golden/screen-overview-t2.txt
+?? tests/oc_ui_overview_test.c
