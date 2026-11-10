@@ -38,7 +38,7 @@ The brief for each job run so far is in `docs/briefs/2026-11-07-<phase>.md`: p1a
 | 1c | wire 1a/1b into the firmware (L/R push, control map, screen menu, existing pages re-homed). The first phase with a hex worth flashing | merged, PR #11 (`7f5c6b3`) |
 | 1d | the sampler's follow-ups: its timer priority set before `begin()`, a ring-full drop counter on INFO, a note in the plan on 1 kHz polling. No engine change | merged, PR #12 (`9e31195`); redone on top of the phase 2 grid (`main` merged into the branch): the INFO rows are the grid's rows, and the engine's tick sets its priority before its `begin()` too |
 | 2 | the drawing kit, 3x5 font, golden snapshots | merged, PR #13 (`937096a`); brief `docs/briefs/2026-11-08-p2.md`; the grid is applied to the phase 1 screens, the crash and safe-mode screens are byte-identical; next: phase 3, OVERVIEW's lanes |
-| 3 | OVERVIEW lanes | in progress: job p3 |
+| 3 | OVERVIEW lanes | in review: job p3, work commit 8268103, draft PR; next: Yakov reviews and merges, then phase 4 |
 | 4 | the TRACK edit screen | to do |
 | 5 | PERFORM | to do |
 | 6 | polish and timing | to do |
